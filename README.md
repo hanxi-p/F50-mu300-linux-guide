@@ -2,12 +2,15 @@
 
 ## 交给 Codex 执行
 
-先按第一章接好网线、USB 和 SD 卡，然后复制下面的提示词交给电脑上的 Codex。安装与后续优化都从这个入口推进：
+## **先按第一章接好网线、USB 和 SD 卡，再复制下面的提示词交给电脑上的 CODEX！**
+
+**安装与后续优化都从这个入口推进。**
 
 ```text
 请按 https://github.com/hanxi-p/F50-mu300-linux-guide 部署我的 F50。
 先读取 README、AGENTS.md 和 docs/10-codex-runbook.md，识别当前设备状态，
 按首页各章准备清单和完成标志推进，完成本机备份后，处理需要的降级、解锁、Root 和 SD 原生 OpenWrt 安装。
+把各章勾选清单保存为本机 F50-progress.md，每完成并确认一项就自动勾选，记录当前阶段与下一步；重连或中断后读取清单继续。
 我已另存需要的用户文件，同意本次降级擦除 userdata，并格式化核对后的目标 SD 卡。
 管理地址设为 192.168.50.1，首次登录后修改管理密码，配置这台电脑的 SSH 密钥，保持电脑互联网走主路由网线。
 软件准备、命令执行和检查由你完成；需要插拔、短接、浏览器选择 USB 或本地输入密码时，集中告诉我。
@@ -22,7 +25,7 @@
 
 核心项目与安装器来自 **[dikeckaan/mu300-linux](https://github.com/dikeckaan/mu300-linux)**。本仓库由 [hanxi-p](https://github.com/hanxi-p) 整理为 Windows 用户的社区实操指北。感谢作者 [dikeckaan](https://github.com/dikeckaan) 和 [kanoqwq / Minikano](https://github.com/kanoqwq) 等上游贡献者，完整致谢见 [CREDITS](CREDITS.md)。
 
-下面的勾选框供你记录自己的进度；执行命令见各章链接。可先把本页复制到自己的 Markdown 文件，再逐项打勾。
+下面的勾选框由 **Codex 自动维护执行进度**。Codex 将各章清单保存到本机 `F50-progress.md`，每完成并确认一项，就把对应的 `[ ]` 改为 `[x]`，同时记录当前阶段与下一步；重连或中断后读取清单继续。执行命令见各章链接。
 
 ## 第一章：准备电脑、线材、SD 卡和网络
 
