@@ -1,0 +1,62 @@
+{
+  "guide_date": "2026-10-07",
+  "tested_device": "ZTE F50 / MU300, original B15 slot b, retained B09 slot a",
+  "upstream": {
+    "repo": "https://github.com/dikeckaan/mu300-linux",
+    "commit": "aff105fa3ed9f4b6add2e8d91ef1cf2d63cee92b",
+    "release": "v2026.10.11"
+  },
+  "runtime": {
+    "openwrt": "25.12.5",
+    "revision": "r33051-f5dae5ece4",
+    "architecture": "aarch64_generic",
+    "kernel": "5.4.254-gb50db5b6224c",
+    "magisk": "30.7",
+    "openclash": "0.47.156",
+    "mihomo": "1.19.29"
+  },
+  "assets": [
+    {
+      "name": "f50-downgrade-unlock-modempatch.zip",
+      "sha256": "33cfc91eb96f67f49d5b722aaf06c7ccb5ead534f38f896191a72e22c18c1af7",
+      "url": "https://github.com/dikeckaan/zte-f50-toolkit/releases/download/releasev1/f50-downgrade-unlock-modempatch.zip"
+    },
+    {
+      "name": "一步解锁Bootloader_飞猫U20_中兴F50_M3_U30Air.zip",
+      "sha256": "7fbfb85996ef13bad517b97e2298b1ac8e575a5968c143a521dc550011fbf25a",
+      "source": "https://github.com/Daniel-Hwang/U20-F50/tree/97d365986dd4d888a3c9aa7647f9f8820862d280"
+    },
+    {
+      "name": "uboot_eng.bin",
+      "sha256": "36cf3341c7f809489451d9c6db793af62a74fdcf0026005c6eb9c24dab77a68c",
+      "bytes": 1511736,
+      "source": "Extract from the verified one-step ZIP; do not substitute engineering-uboot_signed.bin"
+    },
+    {
+      "name": "Magisk-v30.7.apk",
+      "sha256": "e0d32d2123532860f97123d927b1bb86c4e08e6fd8a48bfc6b5bee0afae9ebd5",
+      "url": "https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk"
+    },
+    {
+      "name": "mu300-kernel.tar.gz",
+      "sha256": "f05483ad7b025ff2284210bcf223676560c72762cd99520d2f6bdde3a46de0ba",
+      "url": "https://github.com/dikeckaan/mu300-linux/releases/download/v2026.10.11/mu300-kernel.tar.gz"
+    },
+    {
+      "name": "mu300-openwrt-luci-rootfs.tar.gz",
+      "sha256": "cbe330982a4a0a8d18fa0c0c1d20862a07e938a8d98575ad45e2851327316ebd",
+      "url": "https://github.com/dikeckaan/mu300-linux/releases/download/v2026.10.11/mu300-openwrt-luci-rootfs.tar.gz"
+    },
+    {
+      "name": "luci-app-openclash-0.47.156.apk",
+      "sha256": "1e4f330fc654e0270ac9cfa762af221335567d9b89388219890e8a7745b914ab",
+      "url": "https://github.com/vernesong/OpenClash/releases/download/v0.47.156/luci-app-openclash-0.47.156.apk"
+    },
+    {
+      "name": "mihomo-linux-arm64-v1.19.29.gz",
+      "sha256": "9a868b5e4e0ad91d9d71e1b41b0cfce78aaba44360c30df74a723f8e3926a86c",
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.29/mihomo-linux-arm64-v1.19.29.gz"
+    }
+  ],
+  "publication": "Documentation and public asset hashes only. Private device data and binaries excluded."
+}
