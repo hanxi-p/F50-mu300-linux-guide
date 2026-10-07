@@ -6,7 +6,7 @@
 
 可以在 `toolkit` 目录启动 `backup_direct.bat`，按工具提示断电后再接入。若正常握手不通，使用 `backup_shortcircuit.bat`，按已确认的测试点顺序进入 BootROM。
 
-脚本显示完成之后，检查新生成的备份目录、文件大小、分区表和错误；明确是否包含 userdata。最初我们排除了 userdata/cache/blackbox，不以“有若干 bin 文件”冒充已备份所有用户文件。
+脚本完成后，检查备份目录、文件大小、分区表与退出状态。明确 userdata 是否包含在内，并另存需要保留的用户文件。
 
 给自己这份原始备份另存哈希：
 
@@ -21,7 +21,7 @@ Get-ChildItem -LiteralPath $OriginalBackup -File |
 
 ## B. 准备保留设备数据的 B09 副本
 
-我们没有直接运行工具包的“刷全部目录”默认脚本。实际操作是另复制 B09 目录，去掉 `miscdata.bin`，不引入外来的 prodnv / NV / 校准镜像，使用这个 fork 的 `write_parts_a` 明确写到 A 槽。
+复制 B09 目录作为工作副本，去掉 `miscdata.bin`，保留本机 prodnv / NV / 校准数据，使用配套工具的 `write_parts_a` 明确写到 A 槽。
 
 ```powershell
 Set-Location $F50Work
@@ -57,7 +57,7 @@ $FlashArgs += 'reset'
 if ($LASTEXITCODE -ne 0) { throw '刷写工具失败，停止后续步骤' }
 ```
 
-这里末尾反斜杠必须作为文件夹参数正常传给原生工具。我们曾遇到批处理引号和尾部反斜杠的问题；若日志显示 ROM 路径错误，先处理参数，不换固件重试。
+这里末尾反斜杠必须作为文件夹参数正常传给原生工具。若日志显示 ROM 路径错误，核对引号、末尾反斜杠和实际传入参数。
 
 直接模式无法握手时，确认已进入 BootROM，并使用同一工具的配套 FDL。测试点分支的连接前缀是：
 
@@ -66,7 +66,7 @@ if ($LASTEXITCODE -ne 0) { throw '刷写工具失败，停止后续步骤' }
 fdl fdl2-dl.bin 0xb4fffe00 exec
 ```
 
-这段前缀替换 direct 模式的 `--kickto 2 exec`，后续写入和读回内容仍要明确。它只记录本次匹配的 FDL/地址，不是跨芯片通用值。
+这段前缀替换 direct 模式的 `--kickto 2 exec`，后续写入和读回内容仍要明确。此处 FDL 与执行地址适用于本文确认的 F50 布局，按配套资源使用。
 
 ## D. 比较 21 个读回结果
 
@@ -128,4 +128,4 @@ fastboot devices
 
 页面当前按钮为 `Connect` 和 `Unlock`：先点 Connect，在浏览器 USB 选择框选本机 F50 的 Fastboot 接口，等待页面确认设备连接，再点 Unlock。`Custom identifier token` / `Custom private key` 是高级选项，不把别人的 token 或密钥填进去。正常签名流程使用页面与设备获取的信息；如果界面要求与原说明不同，先停下对照原 PDF，不能用其他设备参数凑齐。
 
-若浏览器没有设备，检查 WebUSB 支持、Fastboot 驱动、USB 数据线及接口占用，不反复写启动镜像。页面显示成功后重新开启调试，核对 [第 2 章的启动属性](02-downgrade-unlock.md#25-最终成功的路径)，再进入 Magisk Root。
+若浏览器没有设备，检查 WebUSB 支持、Fastboot 驱动、USB 数据线及接口占用，不反复写启动镜像。页面显示成功后重新开启调试，核对 [第 2 章的启动属性](02-downgrade-unlock.md#25-浏览器签名解锁)，再进入 Magisk Root。

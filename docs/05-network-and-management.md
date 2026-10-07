@@ -1,44 +1,19 @@
-# 5. 管理连接、地址更新、SSH 和 IPv6
+# 5. 管理连接、地址更新与 SSH
 
 本章中 PowerShell 命令在电脑执行，`sh` 命令在 F50 的 SSH / 串口终端执行。不要在 Windows 直接运行 `uci`。初始地址 `192.168.77.1`，完成后为 `192.168.50.1`。
 
-## 5.1 USB 网卡出现，但 SSH 和网页不通
+## 5.1 建立管理连接
 
-先核对 Windows 网卡状态、IPv4 地址和到管理地址的路由，不把“没有 ADB”当成 Linux 没启动。Linux 使用 NCM 网络与串口，Android ADB 不应出现在这个阶段。
+Windows 中确认 NCM 网卡已取得 F50 的管理网段地址，再连接初始地址：
 
 ```powershell
 Get-NetAdapter | Format-Table ifIndex,Name,InterfaceDescription,Status
 Get-NetIPAddress -AddressFamily IPv4 | Format-Table InterfaceIndex,IPAddress,PrefixLength
 Test-NetConnection 192.168.77.1 -Port 22
+ssh root@192.168.77.1
 ```
 
-本次 USB 和串口已经枚举，但 SSH、LuCI 都无响应。通过 USB 串口检查发现 Linux 正常启动，`fw4` 生成 flowtable 时遇到厂商内核兼容问题：
-
-```text
-Resource busy: flowtable ft
-No such file or directory: flow offload @ft
-The rendered ruleset contains errors, not doing firewall restart.
-```
-
-结果是早期 USB 防火墙规则仍在，正常 `br-lan` 管理放行未完成。处理如下：
-
-1. 在设备管理器找到这次新增的 USB 串口，不固定照抄我们当时的 COM5。
-2. 使用 PuTTY 等串口工具，115200 波特、8 数据位、无校验、1 停止位、无流控。
-3. 连接后按一次 Enter，等待 `askfirst` 控制台进入 shell。
-4. 执行以下命令。
-
-```sh
-logread | tail -n 100
-uci get firewall.@defaults[0].flow_offloading
-uci set firewall.@defaults[0].flow_offloading=0
-uci commit firewall
-/etc/init.d/firewall restart
-nft list ruleset | grep -E 'br-lan|sipa_eth0'
-```
-
-重新尝试 SSH 和 LuCI。成功标志是防火墙重启没有上述错误，规则包含 LAN / WAN 接口，并能登录。我们关闭的是软件 flow offloading，没有关闭防火墙；不用清空整个 nft ruleset。
-
-若串口也未出现，回到启动日志、USB 驱动和第 8 章排查，不能凭这一条错误假设所有设备都是同一原因。
+使用安装时设置的密码登录，打开 http://192.168.77.1/ 确认 LuCI 可用。连接超时时，查询 [Q&A：USB 网卡出现但管理不通](08-troubleshooting.md#usb-management)。
 
 ## 5.2 将管理地址更新为 192.168.50.1
 
@@ -69,7 +44,7 @@ uci get dhcp.mu300_usb.ip
 
 预期依次是 `LAN_IP=192.168.50.1`、`192.168.50.1`、`192.168.50.200`。若本版本没有 `dhcp.mu300_usb`，先查看 `uci show dhcp` 找到实际 USB 主机条目，不凭空新建同 MAC 的第二个条目。
 
-**通过串口执行** `/etc/init.d/network restart`，或在 LuCI 中应用网络更改。网络重启会中断旧地址的 SSH，USB 网卡 / 串口也可能重新枚举；这是本次实际发生的现象。不要依赖旧 SSH 会话继续返回结果。我们的 BusyBox 没有 `nohup`，使用 `nohup ... &` 会根本没有完成应用。
+**通过串口执行** `/etc/init.d/network restart`，或在 LuCI 中应用网络更改。网络重启会中断旧地址的 SSH，USB 网卡 / 串口也可能重新枚举；应用后重新获取 USB 租约，用新地址连接。
 
 Windows 中找到 F50 USB 网卡的实际名称，更新 DHCP 租约：
 
@@ -86,9 +61,9 @@ ssh root@192.168.50.1
 
 ## 5.3 电脑网线联网，F50 USB 仅管理
 
-适用于本次场景：电脑接主路由网线保持互联网，同时连 F50 管理。准备阶段的接口 metric 仍须保留。更可靠的方法是让 F50 对这台 USB 管理电脑不发默认网关和 DNS，但保留直连网段地址。
+适用场景：电脑接主路由网线保持互联网，同时连 F50 管理。准备阶段的接口 metric 仍须保留。更可靠的方法是让 F50 对这台 USB 管理电脑不发默认网关和 DNS，但保留直连网段地址。
 
-我们使用安装器已经生成的 `dhcp.mu300_usb` 主机条目，在其上打标签，不新建重复 MAC 条目：
+使用安装器已经生成的 `dhcp.mu300_usb` 主机条目，在其上打标签，不新建重复 MAC 条目：
 
 ```sh
 uci show dhcp.mu300_usb
@@ -109,7 +84,7 @@ Get-NetIPInterface -AddressFamily IPv4 |
   Format-Table InterfaceIndex,InterfaceAlias,InterfaceMetric
 ```
 
-预期 F50 USB 没有默认网关，电脑默认互联网出口为主路由网线；直连 `192.168.50.0/24` 仍走 F50 USB。这不影响路由器本身使用蜂窝流量，也不要求普通 Wi-Fi 客户端停用路由器。
+预期 F50 USB 没有默认网关，电脑默认互联网出口为主路由网线；直连 `192.168.50.0/24` 仍走 F50 USB。F50 本身继续使用蜂窝网络，其他 Wi-Fi 客户端保持各自的路由设置。
 
 ## 5.4 配置专用 SSH 密钥
 
@@ -150,28 +125,10 @@ Host f50
     ServerAliveInterval 30
 ```
 
-之后 `ssh f50` 应能登录。先核对密钥登录再调整密码认证；本次没有要求关闭密码登录。重装后主机密钥变化要先确认原因和新指纹，不能把 `StrictHostKeyChecking no` 当作修复。
+之后 `ssh f50` 应能登录。先验证密钥登录，再按需调整密码认证。重装后按可信渠道核对新主机指纹，更新对应 known_hosts 条目。
 
-## 5.5 IPv6 是存在的，但分清 WAN 与 LAN
+## 5.5 完成配置后核对
 
-在 F50 上检查：
+用新地址登录 SSH 与 LuCI，确认电脑默认互联网出口仍为主路由网线。检查 SD 根挂载、蜂窝 WAN 与启动状态，再按第 4 章使用系统切换命令、按第 7 章保存完整备份。
 
-```sh
-ip -6 addr show dev sipa_eth0
-ip -6 route
-ping -6 -c 3 2606:4700:4700::1111
-uci show dhcp.lan
-```
-
-本次蜂窝口有全局 IPv6 地址、IPv6 默认路由，经蜂窝网络 ping6 无丢包。说明 F50 流量网络支持 IPv6，不能因为电脑没用 IPv6 就把路由器 IPv6 全关。
-
-但是为避免电脑改走 F50，本次保留了 LAN DHCPv6 禁用、RA lifetime 为 0 的配置。OpenClash IPv6 与 IPv6 DNS 已打开；这**不等于所有 LAN 客户端都已获得可用 IPv6 默认路由**。要把 F50 当主路由供 Wi-Fi 客户端原生 IPv6 使用，需单独根据蜂窝前缀、作者网络服务和运营商限制配置 LAN RA / DHCPv6，并检查电脑是否因此选择 F50 出口。
-
-Windows 检查 IPv6 默认路由：
-
-```powershell
-Get-NetRoute -AddressFamily IPv6 -DestinationPrefix '::/0' |
-  Format-Table InterfaceIndex,NextHop,RouteMetric
-```
-
-IPv4 优先级设置不会自动控制 IPv6 出口；不要只看一个协议的路由表判断“电脑已经走网线”。
+需要调整 IPv6 LAN 使用场景时，查询 Q&A 的可选网络配置。

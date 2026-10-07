@@ -2,19 +2,19 @@
 
 目标：在已解锁、能正常启动的 B09 上，获得安装器可实际使用的 `su` 权限。
 
-## 旧预修补镜像遇到的问题
+## 为什么需要 Root
 
-我们最初尝试了社区预修补 B09 镜像：临时 `fastboot boot` 或写入后看到 Magisk 进程，并不等于 adb shell 能获得 root。旧镜像中有 canary 核心和 stub 管理器，Shell 授权状态也不可靠。`su` 文件存在但返回拒绝，仍然没有完成 Root。
+作者安装器需要从本机 Android 提取 vendor 运行资源，并写入 Linux 启动分区和启动控制数据；这些动作需要 Android 的超级用户权限。Magisk 用本机 B09 原始 boot 生成对应修补镜像，再通过管理器授权 Shell，给安装器提供可验证的 `su`。已具备有效 Root 时，先检查 `adb shell su -c id`，通过后可直接进入 SD 安装。
 
-## 最终使用的组合
+## 准备官方 Magisk 与原始 boot
 
 - 官方 [Magisk v30.7](https://github.com/topjohnwu/Magisk/releases/tag/v30.7)。
 - 本机对应的 **原始 B09 boot 镜像**，不是其他固件或其他设备的 boot。
 - 原始 kernel 保持不变，修补 ramdisk，输出本次专用的 Magisk boot 镜像。
 
-通常可以在 Magisk 管理器中选择“选择并修补一个文件”，将原始 boot 送进去，取回输出。我们这次为排除旧组件影响，实际在设备上运行官方 APK 中的修补文件，参数如下：
+在官方 Magisk 管理器中选择“选择并修补一个文件”，输入本机原始 B09 boot，再取回修补输出。
 
-### 推荐给读者的操作：官方管理器修补
+### 使用管理器修补
 
 先回到已启动的 Android，不在 Fastboot 或 OpenWrt 下运行以下 ADB 命令。将第 0 章下载的官方 APK 保存为工作目录中的 `Magisk-v30.7.apk`，原始镜像来自保留的 B09 固件目录。
 
@@ -40,16 +40,7 @@ Get-Item .\magisk-B09-own.img | Select-Object Name,Length
 Get-FileHash .\magisk-B09-own.img -Algorithm SHA256
 ```
 
-保存这次输出的哈希，确认文件非空、修补日志成功且输入确为 B09。不得下载别人修补好的 boot 来替代本步骤。官方管理器路径由 Magisk 作者支持；下方 CLI 参数是我们当时排查旧组件后使用的实操记录，不要求读者同时执行两种修补方法。
-
-```sh
-BOOTMODE=true KEEPVERITY=true KEEPFORCEENCRYPT=true PREINITDEVICE=cache \
-  sh ./boot_patch.sh stock-B09.img
-```
-
-这不是完整下载脚本：`boot_patch.sh`、`util_functions.sh`、magiskboot、magiskinit、magisk、stub 等均须来自同一个官方 APK，按其实际 ABI 组织好后在设备工作目录执行。`PREINITDEVICE=cache` 是本次设备上的选择，不是所有 Android 通用常量。优先参照 [Magisk 作者安装说明](https://topjohnwu.github.io/Magisk/install.html)。
-
-本次输出 64 MiB，kernel 部分与 B09 原始镜像一致。修补日志中个别厂商 hex pattern 未找到，不应只凭一行字判断成败；要看退出状态、解包结果和 kernel/输出镜像核对。
+保存输出哈希，确认修补日志成功、输入镜像属于本机 B09。修补方法参照 [Magisk 作者安装说明](https://topjohnwu.github.io/Magisk/install.html)。
 
 ## 写入前先确认槽位
 
@@ -63,7 +54,7 @@ fastboot flash boot_a "$F50Work\magisk-B09-own.img"
 fastboot reboot
 ```
 
-`boot_a` 不是对所有设备的默认答案。以后 Linux 放在槽 b，误刷 b 会覆盖 Linux 启动镜像。不要把第三方预修补镜像直接当作通用答案。
+本文 Android 使用槽 a、Linux 使用槽 b；执行前确认 `ro.boot.slot_suffix` 为 `_a`，Root 镜像写入 `boot_a`。写入 `boot_b` 会覆盖 Linux 启动镜像。
 
 ## 管理器与授权同样关键
 
@@ -78,6 +69,6 @@ adb shell su -c id
 
 本次返回 `uid=0(root)`，才确认 Root 完成。
 
-F50 是无屏设备，但 Android 中仍有显示界面。我们用 ADB 唤醒、截图与 UI 操作完成管理器安装和授权；需要人工查看时可用 scrcpy。`uiautomator` 某些导航按钮边界会不准，不能把坐标点击当成通用脚本。
+F50 的 Android 界面可以通过 scrcpy 操作，用于完成 Magisk 管理器安装、环境设置与 Shell 授权。
 
-修补后的 boot 哈希只标识这次产物，不作为别人应直接刷入的下载资源。设备镜像不放在公开仓库。
+修补输出与哈希保存到自己的备份目录，便于回退与核对。

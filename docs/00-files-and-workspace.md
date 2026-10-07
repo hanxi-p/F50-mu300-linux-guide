@@ -37,7 +37,7 @@ ZIP 有无外层目录以下载内容为准。解压后整理到上述位置，�
 | Magisk v30.7 APK | [官方下载](https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk) | 修补本机 B09 boot、授权 Shell |
 | mu300-linux | [作者仓库](https://github.com/dikeckaan/mu300-linux) | 原生 Linux 与 SD 安装 |
 
-Minikano 包在这份公开镜像中的内容已核对，和本次本地文件完全一致。为避免镜像仓库以后改变文件，下面使用固定提交：
+Minikano 配套工具包使用下列固定提交，下载后按 SHA256 核对：
 
 ```powershell
 $UnlockSource = 'https://raw.githubusercontent.com/Daniel-Hwang/U20-F50/97d365986dd4d888a3c9aa7647f9f8820862d280/'
@@ -55,7 +55,7 @@ ZIP: 7fbfb85996ef13bad517b97e2298b1ac8e575a5968c143a521dc550011fbf25a
 uboot_eng.bin: 36cf3341c7f809489451d9c6db793af62a74fdcf0026005c6eb9c24dab77a68c
 ```
 
-同一资料仓库单独放着的 `engineering-uboot_signed.bin` **不是**这里的 `uboot_eng.bin`。前者曾让我们这台设备无法正常启动，不能因为名称都包含 engineering 就混用。
+本流程使用 ZIP 内的 `uboot_eng.bin`，有效载荷 1,511,736 字节。资料仓库另列的 `engineering-uboot_signed.bin` 属于另一份镜像，按这里的文件名、大小与 SHA256 选择配套资源。
 
 B09 ZIP 的本次校验值为：
 
@@ -88,6 +88,6 @@ Set-Location .\mu300-linux
 git checkout aff105fa3ed9f4b6add2e8d91ef1cf2d63cee92b
 ```
 
-本次发行资源标签为 `v2026.10.11`，操作发生在 2026-10-07。标签名字按作者发布记录使用，不把它解释为我们操作的日期。
+配套发行资源标签为 `v2026.10.11`；安装命令使用这一完整标签。
 
-这组固定版本是用于复现我们的案例。要使用新版本时，先阅读作者 README 和更新日志，再重新确认本文中依赖版本的选项。
+本文命令与校验值对应这组固定版本。升级时按作者 README 和更新日志核对安装选项。

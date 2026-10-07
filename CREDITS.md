@@ -1,6 +1,6 @@
 # 作者与项目链接
 
-这份实操指北由 [hanxi-p](https://github.com/hanxi-p) 整理，核心能力由下列项目提供。没有这些作者的工作，就没有这次安装。
+这份实操指北由 [hanxi-p](https://github.com/hanxi-p) 整理，核心能力由下列项目提供。感谢作者们提供安装器、驱动、解锁与系统集成能力。
 
 | 用途 | 作者 / 项目 |
 |---|---|
@@ -17,6 +17,4 @@
 | OpenWrt 代理管理插件 | [vernesong/OpenClash](https://github.com/vernesong/OpenClash) |
 | 代理核心 | [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) |
 
-本次解锁还参照了 Minikano 整理的原始解锁说明，以及论坛的测试点讨论。这里重新叙述我们实测的操作与结果，不转载原始 PDF、论坛截图或网盘二进制包。工具包实际文件和版本应从作者渠道核对；不能把同名文件视为同一内容。
-
-问题归属也要区分：降级、Bootloader 解锁和 Magisk Root 发生在 mu300-linux 安装之前，不能把这些操作中的错误归咎于 Linux 安装器。
+解锁步骤参照 Minikano 原始说明；测试点资料需与实际 PCB 核对。工具与原始资料从作者渠道获取，本文提供配套版本和文件哈希。

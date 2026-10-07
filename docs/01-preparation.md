@@ -1,11 +1,47 @@
 # 1. 准备、网络顺序与接口识别
 
-## 本次环境
+## 操作环境与硬件准备
 
-- Windows 11 x64，PowerShell，Google Platform Tools。
+本指南的主机环境是 **Windows 11 x64 + PowerShell 7**。Git 用于获取固定提交，Platform Tools 用于 Android / Fastboot，Chrome / Edge 用于 WebUSB 解锁。Windows 自带 tar / curl 可用于安装器；安装器还需要 Python 3 与 lz4，按其提示补齐。其他电脑系统使用作者对应安装入口，本文 PowerShell 命令按 Windows 环境执行。
+
+- Windows 11 x64、PowerShell 7、Git for Windows、Google Platform Tools。
 - ZTE F50 / MU300，初始 Android B15，活动槽 b，约 64 GB 内置存储。
-- 一张约 64 GB SD 卡，允许清空；最终 Linux 系统放在这张卡上。
+- 一张允许清空的 SD 卡；当前 OpenWrt + OpenClash 约 213 MiB，16 GB 容量够用，示例设备使用标称 64 GB 卡。
 - 电脑网线连接主路由；Wi-Fi 和 USB 连接 F50，避免 F50 的重启使电脑断网。
+
+### 硬件清单
+
+| 准备项 | 要求 / 用途 |
+|---|---|
+| F50 / MU300 | 核对型号、PCB 与分区布局；保持可稳定供电 |
+| 网线与有线网口 | 电脑连接能上互联网的主路由；无网口时使用可靠 USB 网卡 |
+| USB 数据线 | 支持数据传输，电脑直连 F50；充电线不能用于 ADB / 下载 |
+| SD 卡 | 允许格式化，16 GB 容量足够当前系统方案；示例使用标称 64 GB 卡 |
+| SIM 卡 | 验证蜂窝网络时需要可用套餐，先了解剩余流量与计费周期 |
+| 本地磁盘空间 | 保存约 1 GB 的 B09 包、安装资源、本机分区备份与读回；至少预留数 GB，包含 userdata 时按实际容量增加 |
+| 可选串口软件 | PuTTY 等，处理 USB 串口日志；对应波特率 115200 |
+| 可选拆机 / 短接工具 | 正常下载路径不可用且需 BootROM 时使用，位置与 PCB 匹配 |
+
+### 连接顺序与网络职责
+
+```text
+互联网 ── 主路由 ── 网线 ── 电脑
+                            │
+                            ├── USB 数据线 ── F50（刷写、ADB、SSH、串口）
+                            └── Wi-Fi ─────── F50（原厂网页 / 热点管理，按需）
+
+F50：插入目标 SD 卡；蜂窝上网检查使用自己的 SIM 卡。
+```
+
+先接主路由网线并确认电脑能联网，再接 F50 USB；需要原厂网页时再连 F50 Wi-Fi。F50 的重启、断电与系统切换不应中断电脑的资源下载。实际 USB 线可同时供电；插拔由操作者完成，工具先等待连接。
+
+### 开始前检查
+
+1. 保存需要的 Android 用户文件与 SD 文件；降级会清空 userdata，安装会格式化确认后的目标 SD。
+2. 准备第 0 章的工具、链接与校验值，核对 PowerShell 7 和 ADB / Fastboot 可执行文件。
+3. 通过网卡名称与路由查询识别主路由网线、F50 Wi-Fi 和 F50 USB，记录实际接口编号。
+4. 安装对应接口驱动，确认 USB 调试与 `adb devices`；下载模式 / Fastboot 的驱动按各阶段核对。
+5. 先完成本机分区 / NV 备份，再进入写入阶段。
 
 准备工具：Platform Tools、对应设备的 ADB 与 SPD 下载驱动、作者的解锁工具、官方 Magisk APK、mu300-linux。链接见 [CREDITS](../CREDITS.md)。不要把“装了 Platform Tools”等同于“驱动已匹配”。
 
@@ -19,7 +55,7 @@
 | ADB | Android shell、重启、Root 操作 | `adb devices` |
 | SPD / U2S / BootROM | 底层备份、刷写、恢复 | 设备管理器 Ports 和下载工具 |
 
-正常 Android 的 RNDIS、Linux 的 NCM、Linux 的 USB 串口也会是不同接口，端口号可随插拔变化。本机 BootROM 曾显示 `VID_1782&PID_4D00`；Linux NCM/串口曾显示 `VID_0525&PID_A4A1`。这是观察记录，不应把它们写成所有 F50 的固定 COM 号。
+正常 Android 的 RNDIS、Linux 的 NCM、Linux 的 USB 串口也会是不同接口，端口号可随插拔变化。本机 BootROM 曾显示 `VID_1782&PID_4D00`；Linux NCM/串口曾显示 `VID_0525&PID_A4A1`。按当前设备枚举确认硬件 ID 与端口号。
 
 ## 先安排电脑联网
 
@@ -30,9 +66,9 @@ Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0'
 Find-NetRoute -RemoteIPAddress 1.1.1.1
 ```
 
-Windows 比较的是路由 metric 与接口 metric 的组合。我们一度只设了网线接口 metric 为 5，但网线默认路由 metric 为 50，F50 新 USB 网卡却是 0 + 20，于是新网卡仍抢到了默认路由。不能只看其中一项。
+Windows 使用路由 metric 与接口 metric 的组合选择出口。例如网线 50 + 5、USB 0 + 20 时，USB 优先；调整后用路由查询确认互联网出口是主路由网线。
 
-有管理员权限时可调整接口 metric，但如果系统拒绝访问，不要宣称已修改成功。我们最终在 F50 中只对电脑 USB MAC 设置不提供默认网关/DNS的 DHCP 标签，保留同网段管理能力；见 [第 5 章](05-network-and-management.md)。
+在管理员 PowerShell 中调整接口 metric，并检查命令返回结果。对电脑 USB 管理租约设置不发默认网关 / DNS 的 DHCP 标签，可保留直连管理而让网线继续负责互联网；见 [第 5 章](05-network-and-management.md)。
 
 需要先设置联网优先级时，在管理员 PowerShell 按实际接口编号填写，不照抄其他电脑的编号：
 
@@ -44,7 +80,7 @@ Set-NetIPInterface -InterfaceIndex $F50NetworkIndex -AddressFamily IPv4 -Automat
 Find-NetRoute -RemoteIPAddress 1.1.1.1
 ```
 
-这只是当前接口的 IPv4 调整，新枚举 USB 接口需重新核对。用上面的默认路由表检查总 metric，必要时对自己的 F50 默认路由调整 RouteMetric；不要删主路由网关。IPv6 出口另看第 5 章。
+以上针对当前接口的 IPv4，新枚举 USB 接口需重新核对。用上面的默认路由表检查总 metric，必要时对自己的 F50 默认路由调整 RouteMetric；不要删主路由网关。IPv6 出口另看第 5 章。
 
 ## 使用前的边界
 
