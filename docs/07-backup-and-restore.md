@@ -2,7 +2,7 @@
 
 ## 7.1 保存范围与验证结果
 
-完整备份包含整个 SD **持久文件系统**，另存 Android / Linux boot、启动控制数据、启动链与分区表，覆盖已安装软件包、MU300 文件、OpenClash 核心、规则和配置。
+完整备份包含整个 SD **持久文件系统**，另存 Android / Linux boot、启动控制数据、启动链与分区表，覆盖已安装软件包、MU300 文件及自己的规则和配置。
 
 此方案采用文件系统归档与启动恢复数据，便于保存和换卡；Android super / userdata 及原始校准数据沿用降级前的独立备份。
 
@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) { throw '归档不能正常读取' }
 Select-String -Path .\archive-members.txt -Pattern 'boot-os|etc/config/network|etc/config/openclash|core/clash_meta'
 ```
 
-备份前停止 OpenClash，完成后恢复服务。运行中归档适合保存持久文件；需要严格一致性时，停机取卡，在 Linux 上离线归档。
+备份前暂停会持续写入数据的扩展服务，完成后恢复服务。运行中归档适合保存持久文件；需要严格一致性时，停机取卡，在 Linux 上离线归档。
 
 不要打包 `dev/proc/sys/tmp/run/mnt` 的运行时绑定挂载，防止重复遍历 SD 或包含内存目录。恢复后应重建目录，不恢复其临时内容。
 
@@ -74,7 +74,7 @@ ssh f50 'uname -a; cat /etc/openwrt_release; mount; df -h; cat /proc/partitions;
 
 ## 7.5 换到 16 GB SD 卡
 
-**16 GB 足够当前这套 OpenWrt + OpenClash 的容量需求。** 持久文件实测约 213.4 MiB，为规则库、日志和后续软件留下充足空间；大量下载与数据存储按实际需求选更大容量。选卡优先考虑稳定性与品质。
+**16 GB 足够当前这套 OpenWrt 的容量需求。** 本次已配置系统的持久文件实测约 213.4 MiB，为规则库、日志和后续软件留下充足空间；大量下载与数据存储按实际需求选更大容量。选卡优先考虑稳定性与品质。
 
 启动链正常、只更换 SD 时：
 
@@ -92,7 +92,7 @@ sync
 sudo umount /mnt/f50-restore
 ```
 
-5. 插回原 F50，接电，观察串口，检查根挂载、管理地址、WAN、启动确认与 OpenClash。
+5. 插回原 F50，接电，观察串口，检查根挂载、管理地址、WAN、启动确认及自己安装的扩展服务。
 
 另一条路线是插入新卡，在 Android 下重新运行同版本作者安装器、选择 SD，再恢复自己的软件和配置。**新安装不能把旧卡完整归档未经核对就全覆盖**，因为新生成的 vendor / boot 与布局可能不同。
 

@@ -117,7 +117,7 @@ apk add --simulate vnstat2
 
 确认索引获取成功、候选架构和依赖符合当前系统，再安装所需包。rootfs 元数据与运行厂商 5.4 内核不同，涉及 kmod 先核对内建能力 / 匹配支持；不把软件源换成 snapshot 或其他 release 来凑依赖。
 
-第三方源放 `/etc/apk/repositories.d/customfeeds.list`，按该软件作者的 APK 签名与架构说明配置。OpenClash 固定本地 APK 的获取方法在 Q&A 可选附页，不需要为一个插件替换整个 OpenWrt 源。
+第三方源放 `/etc/apk/repositories.d/customfeeds.list`，按该软件作者的 APK 签名与架构说明配置。扩展软件的固定本地 APK 获取方法由 Q&A 进入对应附页，不需要为一个插件替换整个 OpenWrt 源。
 
 ## 6. MU300 系统更新
 
@@ -137,6 +137,6 @@ mu300-update apply
 
 ## 7. 可选配置入口
 
-- [Q&A](08-troubleshooting.md)：OpenClash、性能调优、Wi-Fi 地区、IPv6 LAN 和持久流量统计。
+- [Q&A](08-troubleshooting.md)：按具体需求查询扩展功能与调优。
 - [完整备份 / 换卡](07-backup-and-restore.md)：文件系统归档、启动恢复数据、ext4 权限。
 - [系统切换](04-sd-openwrt.md#46-系统切换)：OpenWrt 去 Android、Android 回 Linux。

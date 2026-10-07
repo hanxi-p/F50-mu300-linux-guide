@@ -6,7 +6,7 @@
 
 - Windows 11 x64、PowerShell 7、Git for Windows、Google Platform Tools。
 - ZTE F50 / MU300，初始 Android B15，活动槽 b，约 64 GB 内置存储。
-- 一张允许清空的 SD 卡；当前 OpenWrt + OpenClash 约 213 MiB，16 GB 容量够用，示例设备使用标称 64 GB 卡。
+- 一张允许清空的 SD 卡；16 GB 足够本文系统路线的容量需求，示例设备使用标称 64 GB 卡。
 - 电脑网线连接主路由；Wi-Fi 和 USB 连接 F50，避免 F50 的重启使电脑断网。
 
 ### 硬件清单

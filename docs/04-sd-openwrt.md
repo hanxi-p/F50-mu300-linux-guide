@@ -46,13 +46,13 @@ $env:MU300_OPENWRT = 'luci'
 | 连续失败后返回 Android | 5 次 |
 | Wi-Fi | 从 Android 导入原来的 SSID / 密码 |
 | GPU extra | 不安装 |
-| VPN extra | 不安装；之后另装 OpenClash |
+| VPN extra | 不安装 |
 | 内核 | 选项 1，厂商 5.4 |
 | 格式化确认 | 核对卡后输入 `ERASE` |
 | 管理密码 | 设置自己的管理密码并妥善保存 |
 | 最终安装确认 | 核对写入摘要后输入 `INSTALL` |
 
-安装器将目标 SD 卡作为 ext4 系统盘。OpenWrt + OpenClash 当前约占 213 MiB，16 GB 卡有充足容量；按安装器支持的布局使用即可。
+安装器将目标 SD 卡作为 ext4 系统盘。16 GB 卡足够本指南的系统容量需求；按安装器支持的布局使用即可。
 
 ## 4.3 安装器做了什么
 

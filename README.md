@@ -1,96 +1,175 @@
 # F50 刷入 mu300-linux 实操指北
 
-让 **ZTE F50 / MU300** 在保留 Android 的同时，从 **SD 卡原生运行 OpenWrt**。本指南串起 B15 降级、解锁、Root、SD 安装和系统切换，让软件准备、操作命令与成功标志都有据可查。整理者：[hanxi-p](https://github.com/hanxi-p)。实操日期：2026-10-07。
+一张 SD 卡，让 **ZTE F50 / MU300 原生运行 OpenWrt**，同时保留 Android，需要时用命令切换。本指南按准备、备份、降级、解锁、Root、安装和扫尾逐章推进。每章先准备所需材料，再完成操作，达到完成标志后打勾进入下一章。
 
-核心项目与安装器来自 **[dikeckaan/mu300-linux](https://github.com/dikeckaan/mu300-linux)**。感谢作者 [dikeckaan](https://github.com/dikeckaan)，以及 [kanoqwq / Minikano](https://github.com/kanoqwq) 等上游贡献者。本仓库是面向 Windows 用户的社区实操指北，提供配套软件下载链接、顺序清晰的安装步骤和按症状检索的排障说明。完整致谢见 [CREDITS](CREDITS.md)。
+核心项目与安装器来自 **[dikeckaan/mu300-linux](https://github.com/dikeckaan/mu300-linux)**。本仓库由 [hanxi-p](https://github.com/hanxi-p) 整理为 Windows 用户的社区实操指北。感谢作者 [dikeckaan](https://github.com/dikeckaan) 和 [kanoqwq / Minikano](https://github.com/kanoqwq) 等上游贡献者，完整致谢见 [CREDITS](CREDITS.md)。
 
-## 一张 SD 卡，让 F50 多一套 OpenWrt
+下面的勾选框供你记录自己的进度；执行命令见各章链接。可先把本页复制到自己的 Markdown 文件，再逐项打勾。
 
-| 项目 | 方案与验证 |
-|---|---|
-| 原始系统 | Android B15，原始活动槽 b |
-| 保留的 Android | B09，槽 a，Bootloader 已解锁，Magisk 30.7 Root |
-| Linux | SD 卡上的原生 OpenWrt 25.12.5，带 MU300 LuCI 面板 |
-| 内核 | 厂商 5.4.254 |
-| SD 卡 | ext4，标签 `mu300sd`；16 GB 足以满足本方案的系统容量需求 |
-| 启动 | 插卡时默认直接进入 Linux；冷启动与重启已验证 |
-| 管理地址 | 从 `192.168.77.1` 改为 `192.168.50.1` |
-| SSH | 电脑专用 Ed25519 密钥，支持 `ssh f50` |
-| 蜂窝网络 | WAN 与运营商提供的公网 IPv6 已完成连接检查 |
-| 电脑联网 | 主路由网线负责互联网，F50 USB 负责管理 |
+## 第一章：准备电脑、线材、SD 卡和网络
 
-**原生启动、保留 Android、按需切换**是这条路线的核心：OpenWrt 根文件系统放在 SD 卡，正常接电直接进入 Linux；需要原厂功能时，用命令切回 Android。内置 GPT 与 Android 分区大小保持原有布局。
+**准备什么：** Windows 11 x64 电脑、PowerShell 7、网线、可上网的主路由、可靠的 USB 数据线、一张可清空的 SD 卡、可用 SIM 卡、本机备份空间。16 GB SD 卡足够这套系统的容量需求；使用已有更大容量的卡也可以。
 
-写入范围明确：Magisk 修补 `boot_a`，Linux 安装器写入 `boot_b` 和 `misc` 启动控制数据。SD 卡承载 Linux 系统文件，内部启动槽负责启动。
+**需要做什么：** 先让电脑保持独立联网，再识别 F50，准备后续各阶段的软件。
 
-## 把这个链接交给 Codex
+- [ ] 电脑网线接主路由，确认能访问互联网。
+- [ ] F50 用 USB 数据线直连电脑；需要进入 Android 管理页时，电脑 Wi-Fi 再连接 F50。
+- [ ] 核对网卡名称，把主路由网线设为优先互联网出口，F50 接口用于管理。
+- [ ] 另存 SD 卡文件和 Android 中需要保留的用户文件。
+- [ ] 准备 PowerShell 7、Git、Python 3 / lz4、ADB / Fastboot、SPD 驱动与下载工具、Chrome / Edge、Magisk 和 scrcpy。
+- [ ] 下载配套 B09、工程 U-Boot 和固定版本的 mu300-linux 安装器，核对来源、SHA256 与解压位置。
 
-接好 F50、插入目标 SD 卡，把仓库链接和下面这段需求发给电脑上的 Codex：
+**完成标志：** 电脑联网不依赖 F50，所需文件已准备好，USB 接口与驱动已识别。
+
+详细步骤与所有软件下载链接：[文件下载与工作目录](docs/00-files-and-workspace.md)、[系统、硬件、驱动与网络优先级](docs/01-preparation.md)。
+
+## 第二章：保存本机原始备份
+
+**准备什么：** 配套下载工具、足够的本地磁盘空间，以及另一处备份保存位置。
+
+**为什么先做：** 保存这台设备自己的启动链、NV 和校准数据，为恢复提供依据。降级会清空 Android 用户数据。
+
+- [ ] 记录当前系统版本、活动槽、分区表和设备布局。
+- [ ] 读取并保存原始启动链、NV / 校准等对应分区。
+- [ ] 核对备份的文件大小与哈希，复制到第二处保存位置。
+- [ ] 用户文件已经另存，确认后再进入降级阶段。
+
+**完成标志：** 本机备份可定位、可校验，用户文件已另存。
+
+详细步骤：[原始备份与降级](docs/02-downgrade-unlock.md)、[读取与校验命令](docs/02a-flash-commands.md)。
+
+## 第三章：降级到配套 B09
+
+**准备什么：** 已校验的配套 B09、SPD 驱动、下载工具，以及第二章的原始备份。
+
+**为什么要降级：** 本指南的解锁和 Root 路线使用配套 B09 环境，先统一系统与启动文件版本。已经满足本文 B09 条件的设备，核对后直接进入下一章。
+
+- [ ] 核对 B09 文件、目标分区和本机布局。
+- [ ] 先启动工具等待连接，再按提示让 F50 断电、插线进入下载模式。
+- [ ] 执行 B09 写入与用户数据清理，保持 USB 连接和供电。
+- [ ] 读回核对写入内容，确认 B09 正常启动。
+
+**完成标志：** B09 已正常开机，版本与目标槽位符合配套路线。
+
+详细步骤：[B09 降级](docs/02-downgrade-unlock.md)、[具体刷写命令](docs/02a-flash-commands.md)。
+
+## 第四章：解锁 Bootloader
+
+**准备什么：** 正常启动的 B09、配套工程 U-Boot、Chrome / Edge 和 subut 页面。
+
+**为什么要解锁：** 后续需要启动 Magisk 修补镜像和 Linux 启动镜像。
+
+- [ ] 按配套说明写入工程启动程序并校验。
+- [ ] 进入对应解锁模式，在浏览器中选择实际 USB 设备。
+- [ ] 按 subut 流程完成签名解锁。
+- [ ] 核对解锁属性；完成配套恢复步骤，确认 Android 仍能正常启动。
+
+**完成标志：** 解锁状态已确认，Android B09 正常开机。
+
+详细步骤：[Bootloader 解锁](docs/02-downgrade-unlock.md)、[解锁与恢复命令](docs/02a-flash-commands.md)。出现 USB 或启动异常时查 [Q&A](docs/08-troubleshooting.md)。
+
+## 第五章：安装 Magisk，取得 Root
+
+**准备什么：** 本机对应 B09 原始启动镜像、Magisk 30.7、ADB / Fastboot 和 scrcpy。
+
+**为什么要 Root：** mu300-linux 安装器需要读取本机运行资源、部署启动支持并写入目标启动槽。
+
+- [ ] 使用本机对应的原始 B09 boot 镜像进行 Magisk 修补。
+- [ ] 保存修补输出与哈希，按说明写入 Android 的 `boot_a`。
+- [ ] 启动 Android，通过 scrcpy 完成 Magisk 环境安装。
+- [ ] 开启 USB 调试，为 ADB Shell 授予 Root。
+- [ ] 执行 `adb shell su -c id`，确认返回 `uid=0`。
+
+**完成标志：** Android 正常启动，安装器能通过 ADB 获得 Root。
+
+详细步骤：[Magisk Root](docs/03-root.md)。
+
+## 第六章：把 OpenWrt 安装到 SD 卡
+
+**准备什么：** 已解锁并 Root 的 Android B09、插好的目标 SD 卡、固定版本的 mu300-linux 安装器。
+
+**为什么安装到 SD：** OpenWrt 根文件系统放在卡上，保留 Android 分区大小与内置 GPT 布局。Linux 安装器写入 `boot_b` 和 `misc` 启动控制数据，内部启动槽负责启动卡上的系统。
+
+- [ ] 先运行安装器只读检查，核对 SD 卡设备节点与容量。
+- [ ] 选择 SD 存储、带 MU300 LuCI 面板的 OpenWrt、厂商 5.4 内核和默认 Linux 启动。
+- [ ] 设置自己的管理密码；Wi-Fi 按安装器选项从 Android 导入。
+- [ ] 核对格式化与写入摘要，再确认 `ERASE` / `INSTALL`。
+- [ ] 等待安装成功和镜像读回校验，确认 SD 根挂载、SSH、LuCI 与蜂窝 WAN 可用。
+
+**完成标志：** 接电进入 SD 上的原生 OpenWrt，管理页面和蜂窝网络可用。
+
+详细步骤：[SD 安装、交互选择与首次启动](docs/04-sd-openwrt.md)。
+
+## 第七章：修改管理密码，配置地址、SSH 和 Wi-Fi
+
+**准备什么：** 能登录 OpenWrt 的 USB 管理连接、首次登录密码、自己选定的新密码和这台电脑的 SSH 公钥。
+
+**需要做什么：** 把安装后的系统配置为自己的日常管理环境。
+
+- [ ] 首次登录后设置自己的 root 管理密码；SSH 中执行 `passwd`，或使用 LuCI 的“系统 → 管理权”。长临时密码的读取方式见详细步骤。
+- [ ] 将管理地址改为 `192.168.50.1`，同步 MU300 LAN 文件和 USB 主机租约。
+- [ ] 生成本机专用 Ed25519 密钥，导入公钥并配置 `ssh f50`。
+- [ ] 给 USB 管理电脑保留直连地址，设置不接收 F50 的默认网关和 DNS，确认电脑互联网仍走主路由网线。
+- [ ] 设置自己的 Wi-Fi 名称和密码，重新连接手机；无线密码与 root 管理密码分别设置。
+- [ ] 核对时区、时间和对应版本的软件源，保存最终配置。
+
+**完成标志：** 新密码能登录 LuCI，`ssh f50` 能用密钥登录，手机 Wi-Fi 可用，电脑互联网出口正确。
+
+详细步骤：[管理密码、地址与 SSH](docs/05-network-and-management.md)、[Wi-Fi、时间、软件源和日常更新](docs/11-daily-management.md)。
+
+## 第八章：掌握系统切换
+
+**准备什么：** OpenWrt 的 SSH 连接，以及 Android 端的 ADB / Root 连接方式。
+
+- [ ] 在 OpenWrt 使用 `mu300-next-boot android`，再执行 `reboot` 切到 Android。
+- [ ] 在 Android 使用 `adb shell su -c mu300-linux` 返回 Linux。
+- [ ] 区分两套管理地址：本文 OpenWrt 为 `192.168.50.1`，Android 原厂通常为 `192.168.0.1`。
+- [ ] 确认正常重启与断电接电后，默认 Linux 能恢复启动。
+
+**完成标志：** 能按需进入两套系统，理解默认启动与 SD 卡回退行为。
+
+详细步骤：[系统切换](docs/04-sd-openwrt.md#46-系统切换)。
+
+## 第九章：保存完整备份，完成交付
+
+**准备什么：** 配置完成的 OpenWrt、本地备份空间和归档校验工具。
+
+- [ ] 保存整个 SD 持久文件系统及启动恢复数据。
+- [ ] 核对备份大小、SHA256 和归档成员，记录恢复方法。
+- [ ] 保存管理地址、密码的私有保存位置、系统切换命令和备份位置。
+- [ ] 按 [分阶段核对表](docs/09-checklist.md) 完成最后核对。
+
+**完成标志：** 安装、管理、切换与恢复材料齐全，可以日常使用。
+
+详细步骤：[完整备份与换卡恢复](docs/07-backup-and-restore.md)。
+
+## 交给 Codex 执行
+
+完成第一章的物理准备后，把仓库链接和下面这段需求发给电脑上的 Codex：
 
 ```text
 请按 https://github.com/hanxi-p/F50-mu300-linux-guide 部署我的 F50。
-先获取仓库，读取 AGENTS.md 和 docs/10-codex-runbook.md，识别当前设备状态，
-完成本机备份后，依次处理需要的 B09 降级、解锁、Root 和 SD 原生 OpenWrt 安装。
+先读取 README、AGENTS.md 和 docs/10-codex-runbook.md，识别当前设备状态，
+按首页各章准备清单和完成标志推进，完成本机备份后，处理需要的降级、解锁、Root 和 SD 原生 OpenWrt 安装。
 我已另存需要的用户文件，同意本次降级擦除 userdata，并格式化核对后的目标 SD 卡。
-管理地址设为 192.168.50.1，配置这台电脑的 SSH 密钥，保持电脑互联网走主路由网线。
+管理地址设为 192.168.50.1，首次登录后修改管理密码，配置这台电脑的 SSH 密钥，保持电脑互联网走主路由网线。
 软件准备、命令执行和检查由你完成；需要插拔、短接、浏览器选择 USB 或本地输入密码时，集中告诉我。
 遇到问题查 Q&A，按实际日志修复；已完成的阶段直接跳过。
-最后保存完整 WRT 备份，交付访问地址、切换系统方法和核对结果。
-OpenClash 属于可选扩展，我提供配置后再安装和导入。
+最后保存完整 WRT 备份，交付访问地址、密码的私有保存位置、切换系统方法、备份位置和逐章完成清单。
 ```
 
-执行入口按设备状态推进软件任务，详细命令沿用各章节；物理连接和设备端交互由操作者配合。无需把个人实验记录逐段交给 Codex。
+详细执行入口：[Codex 全流程执行入口](docs/10-codex-runbook.md)。
 
-## 提前准备什么
+## Q&A
 
-**操作环境：Windows 11 x64 + PowerShell 7。** 浏览器使用 Chrome / Edge；设备端先运行 Android B09，再安装 SD 上的 OpenWrt。换卡时需要保留 Linux 文件权限，离线恢复使用 Linux 电脑或 Live USB。
+遇到安装问题或需要增加功能时，按具体需求进入 [Q&A：问题与解决方法](docs/08-troubleshooting.md)。
 
-- 一台匹配本文分区布局的 F50 / MU300，一根可靠的 USB 数据线和稳定供电。
-- 一张可清空的 SD 卡；当前这套系统使用 16 GB 容量即可。
-- 电脑通过主路由网线保持互联网，同时用 USB / Wi-Fi 管理 F50。
-- 本机启动链、NV / 校准数据和用户文件的备份空间。
+## 项目与更新地址
 
-| 软件 / 文件 | 用途 | 获取地址 |
-|---|---|---|
-| PowerShell 7 | 执行 Windows 命令与安装器 | [PowerShell Releases](https://github.com/PowerShell/PowerShell/releases) |
-| Git for Windows | 获取固定版本的安装器 | [Git 官方下载](https://git-scm.com/downloads/win) |
-| Platform Tools | ADB / Fastboot | [Google 官方下载](https://developer.android.com/tools/releases/platform-tools) |
-| B09、SPD 驱动与下载工具 | 备份、降级、读回 | [zte-f50-toolkit releasev1](https://github.com/dikeckaan/zte-f50-toolkit/releases/tag/releasev1) |
-| 配套工程 U-Boot | Bootloader 解锁准备 | [固定文件与校验说明](docs/00-files-and-workspace.md#02-必备下载) |
-| Chrome / Edge + subut | 浏览器签名解锁 | [subut 页面](https://unisoc-android.github.io/subut/) |
-| Magisk 30.7 + scrcpy | Root 与无屏 Android 界面操作 | [Magisk](https://github.com/topjohnwu/Magisk/releases/tag/v30.7)、[scrcpy](https://github.com/Genymobile/scrcpy/releases) |
-| mu300-linux 安装器 | SD 原生 OpenWrt 与系统切换 | [作者仓库](https://github.com/dikeckaan/mu300-linux) |
+- 本指南：[hanxi-p/F50-mu300-linux-guide](https://github.com/hanxi-p/F50-mu300-linux-guide)。
+- 作者软件更新：[mu300-linux Releases](https://github.com/dikeckaan/mu300-linux/releases)。
+- 配套版本、固定提交和 SHA256：[versions.json](versions.json)。
 
-文件解压位置、固定提交和 SHA256 按第 0 章统一准备，再进入刷写步骤。
+本文对应 Windows 11 x64、F50 B15 → B09、Android 槽 a / Linux 槽 b、SD 存储路线。其他 PCB、分区布局或版本，先按作者对应说明核对；新版本先阅读作者更新说明。
 
-完整准备清单见 [电脑系统、线材、SD、SIM 与网络顺序](docs/01-preparation.md)。阶段目的也在各章开头说明：B09 统一配套解锁环境，解锁允许启动修补 / Linux 镜像，Root 给安装器提供本机提取与写入权限，SD OpenWrt 提供可扩展的蜂窝路由系统。
-
-## 部署主线
-
-1. [文件下载、哈希、工作目录与命令约定](docs/00-files-and-workspace.md)
-2. [准备、网络顺序与接口识别](docs/01-preparation.md)
-3. [备份、B09 降级与 Bootloader 解锁](docs/02-downgrade-unlock.md)
-   - [逐条刷写、解锁与读回命令](docs/02a-flash-commands.md)
-4. [Magisk Root：修补本机原始 B09 启动镜像](docs/03-root.md)
-5. [通过作者安装器把 OpenWrt 安装到 SD 卡](docs/04-sd-openwrt.md)
-6. [建立管理连接、更新地址与配置 SSH](docs/05-network-and-management.md)
-7. [完整 OpenWrt 备份与换卡恢复](docs/07-backup-and-restore.md)
-8. [分阶段核对表](docs/09-checklist.md)
-
-由 Codex 执行时，先读 [全流程执行入口](docs/10-codex-runbook.md)，再按阶段调用上面的详细步骤。Android ↔ OpenWrt 切换命令见 [系统切换](docs/04-sd-openwrt.md#46-系统切换)。
-
-## Q&A 与可选扩展
-
-安装异常按 [Q&A](docs/08-troubleshooting.md) 查询：USB 识别、解锁、Root 授权、首次启动和地址更新都有对应解决方法。OpenClash、性能优化、Wi-Fi 地区、IPv6 LAN 配置、持久流量统计与 SD 换卡也从这里按需进入。
-
-日常扫尾见 [更新源、Wi-Fi 名称、后台与 SSH](docs/11-daily-management.md)。
-
-项目更新地址：[hanxi-p/F50-mu300-linux-guide](https://github.com/hanxi-p/F50-mu300-linux-guide)。作者上游更新地址：[mu300-linux Releases](https://github.com/dikeckaan/mu300-linux/releases)。本指南记录固定版本；新版本先阅读作者更新说明，再按自己的设备重新核对。
-
-已验证的软件版本与资源 SHA256 见 [versions.json](versions.json)。本文命令对应 F50 B15 → B09、Android 槽 a / Linux 槽 b、SD 存储路线；其他 PCB、分区布局或版本，先按作者对应说明核对。
-
-## 公开范围
-
-本仓库发布安装文档、资源链接、校验值和恢复说明，软件从各作者渠道获取。设备备份、NV / 校准数据、密钥与订阅由使用者本地保存。
-
-原始文档采用 [CC BY 4.0](LICENSE.md)。上游软件与固件保留各自许可；本仓库的许可不覆盖它们。
+本仓库发布安装文档、资源链接、校验值和恢复说明。设备备份、NV / 校准数据、密钥、密码与订阅保存在使用者本机。原始文档采用 [CC BY 4.0](LICENSE.md)，上游软件与固件保留各自许可。
