@@ -2,6 +2,8 @@
 
 本章在前面几章操作之前完成。以下以 Windows PowerShell 为例，选择英文路径可以减少批处理、压缩包和编码问题。
 
+由 Codex 负责本章的软件准备：检查已有工具 → 按下面链接下载缺少的软件和配套文件 → 安装 / 解压 → 核对版本、SHA256 与可执行路径 → 自动勾选本机进度清单。用户负责准备电脑、硬件连接和配合必要的设备端操作。
+
 带原生 EXE 参数数组的示例以 **PowerShell 7** 为准；Windows 自带 PowerShell 5.1 在带空格及末尾反斜杠参数的处理上不同。先运行 `$PSVersionTable.PSVersion` 确认版本。作者的 `install.cmd` 可用于 cmd.exe，但不能把 PowerShell 语法直接粘贴进 cmd。
 
 ## 0.1 建立目录
@@ -30,6 +32,13 @@ ZIP 有无外层目录以下载内容为准。解压后整理到上述位置，�
 
 | 文件 | 来源 | 本次用途 |
 |---|---|---|
+| PowerShell 7 | [官方 Releases](https://github.com/PowerShell/PowerShell/releases) | 执行本文 Windows 命令 |
+| Git for Windows | [官方下载](https://git-scm.com/downloads/win) | 获取固定提交的安装器 |
+| Python 3 | [Windows 官方下载](https://www.python.org/downloads/windows/) | 安装器运行依赖；先检查已有 Python |
+| Python lz4 模块 | [PyPI](https://pypi.org/project/lz4/)，作者安装器缺失时会补装 | 使用安装器实际调用的 Python 安装模块 |
+| Chrome / Edge | [Chrome](https://www.google.com/chrome/)、[Edge](https://www.microsoft.com/edge/download) | WebUSB；已有可用浏览器时复用 |
+| scrcpy | [官方 Releases](https://github.com/Genymobile/scrcpy/releases) | 操作无屏 Android 上的 Magisk 界面 |
+| subut | [解锁页面](https://unisoc-android.github.io/subut/) | 浏览器签名解锁 |
 | Google Platform Tools Windows ZIP | [官方下载](https://dl.google.com/android/repository/platform-tools-latest-windows.zip) | ADB、Fastboot |
 | B09 / SPD 驱动 / 刷机工具 ZIP | [作者 releasev1](https://github.com/dikeckaan/zte-f50-toolkit/releases/tag/releasev1)，[ZIP](https://github.com/dikeckaan/zte-f50-toolkit/releases/download/releasev1/f50-downgrade-unlock-modempatch.zip) | 原厂备份和 B09 降级 |
 | Minikano 整理的一步解锁包 | [Daniel-Hwang 的资料页](https://github.com/Daniel-Hwang/U20-F50)，文件 `一步解锁Bootloader_飞猫U20_中兴F50_M3_U30Air.zip` | 提取本次成功使用的工程 U-Boot；不运行其中一键解锁批处理 |

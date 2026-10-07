@@ -4,7 +4,7 @@
 
 本指南的主机环境是 **Windows 11 x64 + PowerShell 7**。Git 用于获取固定提交，Platform Tools 用于 Android / Fastboot，Chrome / Edge 用于 WebUSB 解锁。Windows 自带 tar / curl 可用于安装器；安装器还需要 Python 3 与 lz4，按其提示补齐。其他电脑系统使用作者对应安装入口，本文 PowerShell 命令按 Windows 环境执行。
 
-- Windows 11 x64、PowerShell 7、Git for Windows、Google Platform Tools。
+- 用户准备能运行 Codex 的 Windows 11 x64 电脑；PowerShell 7、Git、Python / lz4、Platform Tools 等软件由 Codex 按第 0 章链接检查、下载和安装。
 - ZTE F50 / MU300，初始 Android B15，活动槽 b，约 64 GB 内置存储。
 - 一张允许清空的 SD 卡；16 GB 足够本文系统路线的容量需求，示例设备使用标称 64 GB 卡。
 - 电脑网线连接主路由；Wi-Fi 和 USB 连接 F50，避免 F50 的重启使电脑断网。
@@ -29,18 +29,18 @@
                             │
                             ├── USB 数据线 ── F50（刷写、ADB、SSH、串口）
                             └── Wi-Fi ─────── F50（原厂网页 / 热点管理，按需）
+```
 
 F50：断电插入目标 SD 卡与自己的 SIM 卡，再接电。降级、解锁、Root 和 SD 安装本身不依赖 SIM 卡；没有卡时可以先完成安装和 USB 管理，记录蜂窝检查待插卡后完成。
 
 软件包、固件与规则文件优先在电脑通过主路由网线下载，再通过 USB 传给 F50。SIM 卡用于少量蜂窝连接、DNS 和网页请求；不自动跑测速、大文件下载或大量外网请求。小规模验证通常不需要很多流量，实际耗量还取决于手机与其他客户端的后台业务，验证期间控制连接设备和业务。
-```
 
 先接主路由网线并确认电脑能联网，再接 F50 USB；需要原厂网页时再连 F50 Wi-Fi。F50 的重启、断电与系统切换不应中断电脑的资源下载。实际 USB 线可同时供电；插拔由操作者完成，工具先等待连接。
 
 ### 开始前检查
 
 1. 保存需要的 Android 用户文件与 SD 文件；降级会清空 userdata，安装会格式化确认后的目标 SD。
-2. 准备第 0 章的工具、链接与校验值，核对 PowerShell 7 和 ADB / Fastboot 可执行文件。
+2. Codex 按第 0 章链接自动准备工具与配套文件，核对校验值、PowerShell 7 和 ADB / Fastboot 可执行路径。
 3. 通过网卡名称与路由查询识别主路由网线、F50 Wi-Fi 和 F50 USB，记录实际接口编号。
 4. 安装对应接口驱动，确认 USB 调试与 `adb devices`；下载模式 / Fastboot 的驱动按各阶段核对。
 5. 先完成本机分区 / NV 备份，再进入写入阶段。
