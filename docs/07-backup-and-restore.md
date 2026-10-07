@@ -22,7 +22,7 @@ ls -l /dev/block/by-name/boot_a /dev/block/by-name/boot_b
 
 ## 7.3 Windows 保存二进制系统归档
 
-先完成第 5 章的 `ssh f50` 密钥登录。这里用 cmd 进行原始字节重定向，避免旧 PowerShell 文本重定向破坏 tar / gzip；不要替换成 `Out-File` 或 `Set-Content`。
+先完成第 5 章的 `ssh f50` 密钥登录。已安装会持续写入数据的扩展服务时，归档前按对应说明暂停，完成后恢复。这里用 cmd 进行原始字节重定向，避免旧 PowerShell 文本重定向破坏 tar / gzip；不要替换成 `Out-File` 或 `Set-Content`。
 
 ```powershell
 $BackupDir = Join-Path $env:USERPROFILE ('F50-backups\WRT-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -30,18 +30,13 @@ New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
 Set-Location $BackupDir
 ssh -o BatchMode=yes f50 'id; df -h /mnt/mu300-disk'
 if ($LASTEXITCODE -ne 0) { throw '先解决 SSH 密钥连接' }
-ssh f50 '/etc/init.d/openclash stop'
-try {
-  cmd /d /c 'ssh -o BatchMode=yes f50 "tar -C /mnt/mu300-disk --exclude=openwrt-luci/dev --exclude=openwrt-luci/proc --exclude=openwrt-luci/sys --exclude=openwrt-luci/tmp --exclude=openwrt-luci/run --exclude=openwrt-luci/mnt -czf - .mu300 boot openwrt-luci lost+found" > sd-filesystem.tar.gz'
-  if ($LASTEXITCODE -ne 0) { throw '归档读取失败' }
-} finally {
-  ssh f50 '/etc/init.d/openclash start'
-}
+cmd /d /c 'ssh -o BatchMode=yes f50 "tar -C /mnt/mu300-disk --exclude=openwrt-luci/dev --exclude=openwrt-luci/proc --exclude=openwrt-luci/sys --exclude=openwrt-luci/tmp --exclude=openwrt-luci/run --exclude=openwrt-luci/mnt -czf - .mu300 boot openwrt-luci lost+found" > sd-filesystem.tar.gz'
+if ($LASTEXITCODE -ne 0) { throw '归档读取失败' }
 Get-Item .\sd-filesystem.tar.gz | Select-Object Name,Length
 Get-FileHash .\sd-filesystem.tar.gz -Algorithm SHA256
 tar -tzf .\sd-filesystem.tar.gz > .\archive-members.txt
 if ($LASTEXITCODE -ne 0) { throw '归档不能正常读取' }
-Select-String -Path .\archive-members.txt -Pattern 'boot-os|etc/config/network|etc/config/openclash|core/clash_meta'
+Select-String -Path .\archive-members.txt -Pattern 'boot-os|etc/config/network|etc/config/wireless|etc/shadow'
 ```
 
 备份前暂停会持续写入数据的扩展服务，完成后恢复服务。运行中归档适合保存持久文件；需要严格一致性时，停机取卡，在 Linux 上离线归档。
