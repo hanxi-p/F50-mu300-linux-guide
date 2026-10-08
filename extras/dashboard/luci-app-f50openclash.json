@@ -1,0 +1,19 @@
+{
+  "luci-app-f50openclash": {
+    "description": "OpenClash homepage switch",
+    "read": {
+      "ubus": {
+        "f50openclash": [
+          "status"
+        ]
+      }
+    },
+    "write": {
+      "ubus": {
+        "f50openclash": [
+          "set_enabled"
+        ]
+      }
+    }
+  }
+}

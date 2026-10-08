@@ -1,0 +1,64 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+. /lib/functions.sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+fail() { json_init; json_add_boolean ok 0; json_add_string error "$1"; json_dump; }
+valid_number() { printf '%s' "$1" | grep -Eq '^[0-9]+([.][0-9]{1,3})?$' && awk -v v="$1" 'BEGIN {exit !(v>=0 && v<=1000000)}'; }
+raw_used() {
+    local data keys k y m rx tx
+    data=$(vnstat --json m 0 -i sipa_eth0 2>/dev/null) || return 1
+    json_load "$data" || return 1
+    json_select interfaces; json_select 1; json_select traffic; json_select month
+    json_get_keys keys
+    for k in $keys; do
+        json_select "$k"; json_select date
+        json_get_var y year; json_get_var m month; json_select ..
+        nowm=$(date +%m); nowm=${nowm#0}
+        if [ "$y" = "$(date +%Y)" ] && [ "$m" = "$nowm" ]; then
+            json_get_var rx rx; json_get_var tx tx
+            awk -v r="$rx" -v t="$tx" 'BEGIN {printf "%.0f",r+t}'; return 0
+        fi
+        json_select ..
+    done
+    echo 0
+}
+case "$1" in
+list) echo '{"status":{},"configure":{"quota_gb":"String","used_gb":"String","calibrate":"Boolean"}}';;
+call)
+    case "$2" in
+    configure)
+        json_load "$(cat)" || { fail '请求格式错误'; exit; }
+        json_get_var quota quota_gb; json_get_var used used_gb; json_get_var calibrate calibrate
+        valid_number "$quota" && valid_number "$used" || { fail '请输入 0–1000000 之间的数字，最多三位小数'; exit; }
+        uci -q set f50quota.plan=plan
+        uci -q set f50quota.plan.quota_gb="$quota"
+        if [ "$calibrate" = 1 ]; then
+            raw=$(raw_used) || { uci -q revert f50quota; fail '流量数据库暂时不可用，请稍后重试'; exit; }
+            section="month_$(date +%Y%m)"
+            adjustment=$(awk -v v="$used" -v r="$raw" 'BEGIN {printf "%.0f",v*1000000000-r}')
+            uci -q set "f50quota.$section=usage"
+            uci -q set "f50quota.$section.month=$(date +%Y-%m)"
+            uci -q set "f50quota.$section.adjustment_bytes=$adjustment"
+        fi
+        if uci -q commit f50quota; then json_init; json_add_boolean ok 1; json_dump; else fail '配置保存失败'; fi
+        ;;
+    status)
+        monthly=$(vnstat --json m 0 -i sipa_eth0 2>/dev/null) || { fail '流量数据库暂时不可用'; exit; }
+        daily=$(vnstat --json d 35 -i sipa_eth0 2>/dev/null)
+        quota=$(uci -q get f50quota.plan.quota_gb); quota=${quota:-0}
+        json_init; json_add_boolean ok 1
+        json_add_string month "$(date +%Y-%m)"
+        json_add_double quota_gb "$quota"
+        json_add_string monthly_json "$monthly"; json_add_string daily_json "$daily"
+        json_add_object adjustments
+        add_adjustment() {
+            local month bytes
+            config_get month "$1" month; config_get bytes "$1" adjustment_bytes 0
+            [ -n "$month" ] && json_add_double "$month" "$bytes"
+        }
+        config_load f50quota; config_foreach add_adjustment usage
+        json_close_object; json_dump
+        ;;
+    *) fail '未知操作';;
+    esac;;
+esac

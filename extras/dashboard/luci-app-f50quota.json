@@ -1,0 +1,19 @@
+{
+  "luci-app-f50quota": {
+    "description": "Monthly cellular quota dashboard",
+    "read": {
+      "ubus": {
+        "f50quota": [
+          "status"
+        ]
+      }
+    },
+    "write": {
+      "ubus": {
+        "f50quota": [
+          "configure"
+        ]
+      }
+    }
+  }
+}

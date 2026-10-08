@@ -192,6 +192,10 @@
 
 遇到安装问题或需要增加功能时，按具体需求进入 [Q&A：问题与解决方法](docs/08-troubleshooting.md)。
 
+### 可选：首页美化与流量套餐面板
+
+安装完成后，可以按需增加 [手机首页优化](docs/13-optional-dashboard.md)：大字号上下行速率、双曲线、本次 / 本月用量、可编辑套餐进度、八核心负载和六个快捷控制。章节提供 Codex 提示词、配套脚本、手机效果图、验收和恢复方法。
+
 ## 项目与更新地址
 
 - 本指南：[hanxi-p/F50-mu300-linux-guide](https://github.com/hanxi-p/F50-mu300-linux-guide)。

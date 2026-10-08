@@ -1,0 +1,19 @@
+{
+  "luci-app-f50channel": {
+    "description": "Homepage Wi-Fi channel selection",
+    "read": {
+      "ubus": {
+        "f50channel": [
+          "status"
+        ]
+      }
+    },
+    "write": {
+      "ubus": {
+        "f50channel": [
+          "set"
+        ]
+      }
+    }
+  }
+}

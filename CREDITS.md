@@ -18,3 +18,5 @@
 | 代理核心 | [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) |
 
 解锁步骤参照 Minikano 原始说明；测试点资料需与实际 PCB 核对。工具与原始资料从作者渠道获取，本文提供配套版本和文件哈希。
+
+可选首页扩展基于上述 mu300-linux 的 MU300 LuCI 页面与采集脚本，由 hanxi-p 调整布局、核心负载和快捷控制；用量历史由 [vergoh/vnstat](https://github.com/vergoh/vnstat) 提供。配套代码的署名与 MIT 许可见 [extras/dashboard/LICENSE](extras/dashboard/LICENSE)。

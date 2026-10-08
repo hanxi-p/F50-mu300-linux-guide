@@ -1,0 +1,33 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+LOCK=/tmp/f50openclash.lock
+case "$1" in
+list) echo '{"status":{},"set_enabled":{"enabled":"Boolean"}}';;
+call)
+ case "$2" in
+ status)
+    json_init
+    if [ -x /etc/init.d/openclash ]; then json_add_boolean installed 1; else json_add_boolean installed 0; fi
+    if pidof clash >/dev/null; then json_add_boolean running 1; else json_add_boolean running 0; fi
+    json_add_boolean enabled "$(uci -q get openclash.config.enable || echo 0)"
+    if [ -d "$LOCK" ]; then
+        pid=$(cat "$LOCK/pid" 2>/dev/null)
+        if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then rm -f "$LOCK/pid" "$LOCK/target"; rmdir "$LOCK" 2>/dev/null; fi
+    fi
+    if [ -d "$LOCK" ]; then json_add_boolean busy 1; else json_add_boolean busy 0; fi
+    json_add_string target "$(cat "$LOCK/target" 2>/dev/null)"
+    json_add_string error "$(cat /tmp/f50openclash-error 2>/dev/null)"
+    json_dump;;
+ set_enabled)
+    json_load "$(cat)" || exit 1
+    json_get_var enabled enabled
+    case "$enabled" in 0|1) ;; *) exit 1;; esac
+    if [ ! -x /etc/init.d/openclash ]; then json_init; json_add_boolean ok 0; json_add_string error '请先安装并配置 OpenClash'; json_dump; exit; fi
+    if ! mkdir "$LOCK" 2>/dev/null; then json_init; json_add_boolean ok 0; json_add_string error '正在切换，请稍候'; json_dump; exit; fi
+    printf '%s' "$enabled" > "$LOCK/target"
+    rm -f /tmp/f50openclash-error
+    /usr/bin/setsid /usr/libexec/f50openclash-worker "$enabled" </dev/null >/tmp/f50openclash-control.log 2>&1 &
+    json_init; json_add_boolean ok 1; json_dump;;
+ esac;;
+esac
