@@ -1,11 +1,11 @@
-# 第十三章（可选）：页面美化与流量套餐面板
+# 第十一章（可选）：页面美化与流量套餐面板
 
 让 F50 的常用信息在手机上打开就能看见：大字号速率、单张双曲线、蜂窝用量、八核心负载和六个快捷控制。原生 OpenWrt 安装完成后，按需增加这套界面。
 
 ## 1. 复制给 Codex 的提示词
 
 ```text
-给已安装 mu300-linux 的 F50 增加本仓库 docs/13-optional-dashboard.md 的可选首页优化。
+给已安装 mu300-linux 的 F50 增加本仓库 docs/11-optional-dashboard.md 的可选首页优化。
 先读取 README、versions.json、本章和 extras/dashboard/install.sh，识别实际版本、蜂窝接口、无线设备与管理连接。
 本补丁匹配 v2026.10.11、OpenWrt 25.12.5、厂商 5.4 内核、sipa_eth0、radio0 / ap0 的 5GHz 无线。版本或接口不同，先适配差异；不要直接覆盖不匹配的页面。
 电脑互联网继续走主路由网线，F50 USB 负责 SSH 管理。使用已有 SSH 配置，不公开密码、私钥、订阅或备份。
