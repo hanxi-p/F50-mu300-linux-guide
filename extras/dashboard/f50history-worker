@@ -8,7 +8,7 @@ while :; do
  rx=$(cat /sys/class/net/sipa_eth0/statistics/rx_bytes 2>/dev/null || echo 0)
  tx=$(cat /sys/class/net/sipa_eth0/statistics/tx_bytes 2>/dev/null || echo 0)
  printf '%s %s %s\n' "$ts" "$rx" "$tx" >> "$D/samples"
- awk -v now="$ts" '$1>=now-600' "$D/samples" | tail -n 200 > "$D/samples.new"
+ awk -v now="$ts" '$1>=now-300' "$D/samples" | tail -n 200 > "$D/samples.new"
  mv "$D/samples.new" "$D/samples"
  awk 'BEGIN{printf "["} NR>1 {dt=$1-t; if(dt>0){a=($2>=rx?($2-rx)/dt:0);b=($3>=tx?($3-tx)/dt:0);printf "%s[%s,%.3f,%.3f]",sep,$1,a,b;sep=","}} {t=$1;rx=$2;tx=$3} END{print "]"}' "$D/samples" > "$D/history.new"
  mv "$D/history.new" "$D/history.json"
