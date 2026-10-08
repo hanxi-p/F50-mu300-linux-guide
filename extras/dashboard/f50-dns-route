@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+api=$(uci -q get f50dashboard.main.adguard_url || echo "http://$(uci -q get network.lan.ipaddr):3000")
+proxy=${1:-auto}
+if [ "$proxy" = auto ]; then if pidof clash >/dev/null; then proxy=1; else proxy=0; fi; fi
+if [ "${2:-auto}" != off ] && pidof AdGuardHome >/dev/null; then
+ if [ "$proxy" = 1 ]; then config='{"upstream_dns":["127.0.0.1:7874"],"fallback_dns":["223.5.5.5","119.29.29.29"]}'; else config='{"upstream_dns":["223.5.5.5","119.29.29.29"],"fallback_dns":[]}'; fi
+ curl -fsS --max-time 5 --retry 5 --retry-connrefused --retry-delay 1 --netrc-file /etc/f50openclash-adguard.netrc -H 'Content-Type: application/json' --data "$config" "${api%/}/control/dns_config" >/dev/null
+ curl -fsS --max-time 5 --netrc-file /etc/f50openclash-adguard.netrc -X POST "${api%/}/control/cache_clear" >/dev/null
+ upstream='127.0.0.1#5353'
+elif [ "$proxy" = 1 ]; then upstream='127.0.0.1#7874'; else upstream=''; fi
+old_server=$(uci -q get dhcp.@dnsmasq[0].server || true)
+old_noresolv=$(uci -q get dhcp.@dnsmasq[0].noresolv || echo 0)
+new_noresolv=0; [ -z "$upstream" ] || new_noresolv=1
+[ "$old_server" != "$upstream" ] || [ "$old_noresolv" != "$new_noresolv" ] || { /etc/init.d/dnsmasq reload; exit 0; }
+uci -q delete dhcp.@dnsmasq[0].server || true
+if [ -n "$upstream" ]; then uci add_list dhcp.@dnsmasq[0].server="$upstream"; uci set dhcp.@dnsmasq[0].noresolv=1; else uci set dhcp.@dnsmasq[0].noresolv=0; uci set dhcp.@dnsmasq[0].resolvfile=/tmp/resolv.conf.d/resolv.conf.auto; fi
+uci commit dhcp
+/etc/init.d/dnsmasq reload

@@ -1,6 +1,7 @@
 'use strict';
 'require view';
 'require rpc';
+'require f50adguard as F50AdGuard';
 'require uci';
 'require mu300.common as M';
 'require f50quota5 as F50Quota';
@@ -79,6 +80,7 @@ return view.extend({
 		this._quotaDispose = F50Quota.mount(root);
 		this._openclashDispose = F50OpenClash.mount(root);
 		this._powerDispose = F50Power.mount(root);
+        this._adguardDispose = F50AdGuard.mount(root);
 		var self = this;
 		var intervalMs = DEFAULT_POLL_S * 1000;
 		var config = L.resolveDefault(uci.load('unisoc_modem')).then(function() {
@@ -105,6 +107,7 @@ return view.extend({
 
 	unload: function() {
 		clearTimeout(this._refreshTimer);
+        if(this._adguardDispose)this._adguardDispose();
         if(this._actionsObserver)this._actionsObserver.disconnect();
 		if (this._channelDispose) this._channelDispose();
 		if (this._quotaDispose) this._quotaDispose();
@@ -239,7 +242,8 @@ return view.extend({
     <button class="mud-btn" id="mud-btn-power">温控模式</button>
     <button class="mud-btn" id="mud-btn-5g">自动 5G</button>
     <button class="mud-btn" id="mud-btn-openclash" aria-pressed="false">OpenClash · 读取状态…</button>
-    <button class="mud-btn" id="mud-btn-other" aria-expanded="false">其他与重启</button>
+    <button class="mud-btn" id="mud-btn-adguard" aria-pressed="false">AdGuard Home</button>
+    <button class="mud-btn" id="mud-btn-other" aria-expanded="false">频段和重启</button>
     <button class="mud-btn" id="mud-btn-wifi">Wi-Fi 开关</button>
     <button class="mud-btn" id="mud-btn-channel">信道设置</button>
     <button class="mud-btn warn" id="mud-btn-modem">${_('Restart modem')}</button>
@@ -345,7 +349,7 @@ return view.extend({
   var lockTable=locks.querySelector('.mud-scroll');locks.querySelector('h3').remove();
   var lockContent=E('div',{id:'f50-lock-details',hidden:true},[E('a',{class:'mud-btn',href:L.url('admin','modem','locks'),style:'display:inline-block;margin:6px 0'},'设置制式与频段'),lockTable]);
   var lockBtn=E('button',{class:'mud-btn',id:'mud-btn-locks','aria-expanded':'false','aria-controls':'f50-lock-details'},'锁制式与频段');
-  root.querySelector('.f50-primary-controls').appendChild(lockBtn);locks.appendChild(lockContent);
+  lockContent.hidden=false;other.appendChild(lockContent);lockContent.style.gridColumn='1 / -1';locks.remove();
   lockBtn.onclick=function(){lockContent.hidden=!lockContent.hidden;lockBtn.setAttribute('aria-expanded',String(!lockContent.hidden));};
   var self=this;
   function moveActions(){if(!document.documentElement.contains(root))return;var actions=document.querySelector('.cbi-page-actions');if(actions && !lockContent.contains(actions)){lockContent.appendChild(actions);actions.style.marginTop='8px';if(self._actionsObserver)self._actionsObserver.disconnect();}}
@@ -454,7 +458,10 @@ return view.extend({
 		};
 		q('btn-wifi').onclick = function() {
 			var on = self.lastInfo && self.lastInfo.wifi && self.lastInfo.wifi.up;
-			act('wifi', on ? 'off' : 'on', null, this);
+			var btn = this;
+			if (!on) { act('wifi', 'on', null, btn); return; }
+			M.confirmBox('关闭 Wi-Fi？', '关闭后，通过 Wi-Fi 连接的设备将断开，无法继续通过 Wi-Fi 管理 F50。', { danger: true, okText: '确认关闭' })
+				.then(function(go) { if (go) act('wifi', 'off', null, btn); });
 		};
 		q('btn-modem').onclick = function() {
 			var btn = this;
@@ -463,16 +470,14 @@ return view.extend({
 		};
 		q('btn-reboot').onclick = function() {
 			var btn = this;
-			M.confirmBox(_('Restart the entire device'), _('All connections will be interrupted.'), { danger: true })
+			M.confirmBox('重启设备？', '所有连接将暂时断开，设备启动后可重新连接。', { danger: true, okText: '确认重启' })
 				.then(function(go) { if (go) act('reboot', null, null, btn); });
 		};
 		q('btn-android').onclick = function() {
 			var btn = this;
-			M.confirmBox(_('Switch to Android'),
-				[ _('The next boot will enter Android and reboot now. This management page and cellular sharing will disconnect.'),
-				  _('To return to OpenWrt, run mu300-next-boot linux in Android and reboot.'),
-				  _('Or do nothing: after five boots that do not finish, it falls back automatically.') ].join('\n'),
-				{ danger: true, okText: _('Switch and reboot') })
+			M.confirmBox('切换到 Android？',
+				'设备将立即重启进入 Android，当前 OpenWrt 管理页面和连接将断开。',
+				{ danger: true, okText: '确认切换并重启' })
 				.then(function(go) { if (go) act('os', 'android', _('Preparing Android boot and rebooting…'), btn); });
 		};
 		q('reveal').onclick = function() {

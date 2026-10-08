@@ -12,10 +12,7 @@ sha256sum -c SHA256SUMS >/dev/null
 backup="/root/f50-dashboard-backups/$(date +%Y%m%d-%H%M%S)-$$"
 mkdir -p "$backup"
 chmod 700 "$backup"
-if chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
-/etc/init.d/f50power enable
-/etc/init.d/f50power start
-/etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo 0 > "$backup/vnstat.enabled"; fi
+if /etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo 0 > "$backup/vnstat.enabled"; fi
 if /etc/init.d/vnstat running; then echo 1 > "$backup/vnstat.running"; else echo 0 > "$backup/vnstat.running"; fi
 if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$backup/f50power.enabled"; else echo 0 > "$backup/f50power.enabled"; fi
 if [ -x /etc/init.d/f50history ] && /etc/init.d/f50history enabled; then echo 1 > "$backup/f50history.enabled"; else echo 0 > "$backup/f50history.enabled"; fi
@@ -48,6 +45,11 @@ cat > "$backup/paths" <<'PATHS'
 /usr/libexec/f50history-worker
 /etc/init.d/f50history
 /usr/share/rpcd/acl.d/luci-app-f50history.json
+/www/luci-static/resources/f50adguard.js
+/usr/libexec/rpcd/f50adguard
+/usr/libexec/f50adguard-worker
+/usr/libexec/f50-dns-route
+/usr/share/rpcd/acl.d/luci-app-f50adguard.json
 PATHS
 while IFS= read -r path; do
  if [ -e "$path" ]; then mkdir -p "$backup$(dirname "$path")"; cp -p "$path" "$backup$path"; fi
@@ -103,9 +105,15 @@ f50history /usr/libexec/rpcd/f50history
 f50history-worker /usr/libexec/f50history-worker
 f50history-init /etc/init.d/f50history
 luci-app-f50history.json /usr/share/rpcd/acl.d/luci-app-f50history.json
+f50adguard.js /www/luci-static/resources/f50adguard.js
+f50adguard /usr/libexec/rpcd/f50adguard
+f50adguard-worker /usr/libexec/f50adguard-worker
+f50-dns-route /usr/libexec/f50-dns-route
+luci-app-f50adguard.json /usr/share/rpcd/acl.d/luci-app-f50adguard.json
 FILES
 chmod 755 /usr/libexec/unisoc-modem/dashboard-info /usr/libexec/rpcd/f50quota /usr/libexec/rpcd/f50channel /usr/libexec/rpcd/f50openclash /usr/libexec/f50openclash-worker
 chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
+chmod 755 /usr/libexec/rpcd/f50adguard /usr/libexec/f50adguard-worker /usr/libexec/f50-dns-route
 /etc/init.d/f50power enable
 /etc/init.d/f50power start
 /etc/init.d/vnstat enable

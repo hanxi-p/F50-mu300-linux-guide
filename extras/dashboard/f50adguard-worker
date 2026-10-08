@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+[ -x /etc/init.d/adguardhome ] && [ -r /etc/f50openclash-adguard.netrc ] || { echo '请先按文档配置 AdGuard Home 服务与本机 API 凭据' > /tmp/f50adguard-error; rmdir /tmp/f50adguard.lock /tmp/f50dns-switch.lock 2>/dev/null || true; exit 1; }
+LOCK=/tmp/f50adguard.lock
+echo $$ > "$LOCK/pid"
+trap 'rm -f "$LOCK/pid" "$LOCK/target"; rmdir "$LOCK" /tmp/f50dns-switch.lock 2>/dev/null || true' EXIT
+case "$1" in
+1) /etc/init.d/adguardhome enable; /etc/init.d/adguardhome start
+ n=0; until pidof AdGuardHome >/dev/null; do n=$((n+1)); [ "$n" -lt 15 ] || { echo 'AdGuard Home 启动失败' > /tmp/f50adguard-error; exit 1; }; sleep 1; done
+ sleep 2;;
+0) /usr/libexec/f50-dns-route auto off; /etc/init.d/adguardhome disable; /etc/init.d/adguardhome stop;;
+esac
+if [ "$1" = 0 ]; then /usr/libexec/f50-dns-route auto off; else /usr/libexec/f50-dns-route auto; fi || { echo 'DNS 联动失败，请检查服务' > /tmp/f50adguard-error; exit 1; }

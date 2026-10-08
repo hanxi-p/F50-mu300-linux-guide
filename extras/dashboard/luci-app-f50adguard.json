@@ -1,0 +1,1 @@
+{"luci-app-f50adguard":{"description":"AdGuard Home switch","read":{"ubus":{"f50adguard":["status"]}},"write":{"ubus":{"f50adguard":["set_enabled"]}}}}

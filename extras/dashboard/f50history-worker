@@ -13,7 +13,7 @@ while :; do
  awk 'BEGIN{printf "["} NR>1 {dt=$1-t; if(dt>0){a=($2>=rx?($2-rx)/dt:0);b=($3>=tx?($3-tx)/dt:0);printf "%s[%s,%.3f,%.3f]",sep,$1,a,b;sep=","}} {t=$1;rx=$2;tx=$3} END{print "]"}' "$D/samples" > "$D/history.new"
  mv "$D/history.new" "$D/history.json"
  if [ "$n" -eq 0 ]; then
-  if ubus call mu300dash status > "$D/status.new" && jsonfilter -i "$D/status.new" -e '@.info.ts' >/dev/null 2>&1; then
+  if /opt/mu300/busybox-bin/timeout -k 3 20 ubus call mu300dash status > "$D/status.new" && jsonfilter -i "$D/status.new" -e '@.info.ts' >/dev/null 2>&1; then
    [ ! -f "$D/status.json" ] || cp "$D/status.json" "$D/previous.json"
    mv "$D/status.new" "$D/status.json"
   fi
