@@ -1,11 +1,12 @@
 'use strict';
 'require view';
+'require rpc';
 'require uci';
 'require mu300.common as M';
 'require f50quota5 as F50Quota';
 'require f50channel as F50Channel';
-'require f50openclash as F50OpenClash';
-'require f50power as F50Power';
+'require f50openclash2 as F50OpenClash';
+'require f50powerlittle as F50Power';
 
 /* MU300 status dashboard -- the LuCI landing page (menu.d hangs it at admin/home).
  *
@@ -20,7 +21,9 @@
  * service); the lock state comes from lock_get (read once when the page loads, again after a lock). */
 
 var DEFAULT_POLL_S = 1.5;
-var RATE_WIN = 80;
+var RATE_WIN = 200;
+var liveStatus=rpc.declare({object:"f50history",method:"status",expect:{"":{}}});
+function dashboardStatus(){return liveStatus().then(function(r){var s=r.snapshot || {};if(!s.info)return M.callStatus();s.history=r.history || [];s.previousCpu=r.previous && r.previous.info && r.previous.info.cpu;return s;});}
 
 function pollSeconds(value) {
 	var seconds = Number(value);
@@ -82,14 +85,14 @@ return view.extend({
 			intervalMs = pollSeconds(uci.get('unisoc_modem', 'main', 'home_refresh_interval')) * 1000;
 		});
 		/* Read the full status once now; never run the sysinfo and status collections twice at the same time. */
-		var first = L.resolveDefault(M.callStatus()).then(function(st) {
+		var first = L.resolveDefault(dashboardStatus()).then(function(st) {
 			self.update(st || {});
 		});
 		/* LuCI poll.add() truncates intervals to whole seconds. Use a one-shot
 		 * timer so 1.5 s remains 1.5 s and slow requests never overlap. */
 		function refresh() {
 			if (!document.documentElement.contains(root)) return;
-			L.resolveDefault(M.callStatus()).then(function(st) { self.update(st || {}); }).finally(function() {
+			L.resolveDefault(dashboardStatus()).then(function(st) { self.update(st || {}); }).finally(function() {
 				if (document.documentElement.contains(root))
 					self._refreshTimer = setTimeout(refresh, intervalMs);
 			});
@@ -102,6 +105,7 @@ return view.extend({
 
 	unload: function() {
 		clearTimeout(this._refreshTimer);
+        if(this._actionsObserver)this._actionsObserver.disconnect();
 		if (this._channelDispose) this._channelDispose();
 		if (this._quotaDispose) this._quotaDispose();
 		if (this._openclashDispose) this._openclashDispose();
@@ -316,7 +320,7 @@ return view.extend({
   var heroRight=root.querySelector('.mud-hero-r');
   heroRight.prepend(E('div',{class:'f50-signal-title'},'信号详情'));
   var qci=root.querySelector('#mud-qci').parentNode;
-  qci.classList.add('f50-qci');root.querySelector('.mud-hero-l').appendChild(qci);root.querySelector('.mud-hero-l').appendChild(E('div',{id:'mud-hero-ambr',class:'f50-hero-ambr'},'AMBR 下 / 上：--'));
+  qci.classList.add('f50-qci');root.querySelector('.mud-hero-l').appendChild(qci);qci.appendChild(E('div',{id:'mud-hero-ambr',class:'mud-tag f50-hero-ambr',title:'网络下发的下行 / 上行会话速率上限'},'--'));
   var cols=link.querySelector('.mud-cols');var cellLine=root.querySelector('#mud-cellline');cellLine.replaceWith(E('div',{class:'f50-hero-band',id:'mud-hero-band'},'--'));cols.prepend(E('div',{class:'f50-cell-detail'},[E('b',{},'基站与小区'),cellLine]));wrap([cols],'蜂窝网络详情',cols);
   device.querySelector('h3').textContent='设备负载与温度';
   var kpis=device.querySelector('.mud-kpis'),extra=E('div',{class:'mud-kpis'});
@@ -343,6 +347,10 @@ return view.extend({
   var lockBtn=E('button',{class:'mud-btn',id:'mud-btn-locks','aria-expanded':'false','aria-controls':'f50-lock-details'},'锁制式与频段');
   root.querySelector('.f50-primary-controls').appendChild(lockBtn);locks.appendChild(lockContent);
   lockBtn.onclick=function(){lockContent.hidden=!lockContent.hidden;lockBtn.setAttribute('aria-expanded',String(!lockContent.hidden));};
+  var self=this;
+  function moveActions(){if(!document.documentElement.contains(root))return;var actions=document.querySelector('.cbi-page-actions');if(actions && !lockContent.contains(actions)){lockContent.appendChild(actions);actions.style.marginTop='8px';if(self._actionsObserver)self._actionsObserver.disconnect();}}
+  this._actionsObserver=new MutationObserver(moveActions);this._actionsObserver.observe(document.body,{childList:true,subtree:true});moveActions();
+
   root.appendChild(E('style',{},`
    .f50-home [hidden]{display:none!important}
    .f50-home .mud-hero{align-items:flex-start;display:flex;flex-wrap:nowrap}
@@ -352,8 +360,10 @@ return view.extend({
    .f50-home .f50-hero-band{font-size:.8rem;color:var(--text-muted,#666);margin-top:4px}
    .f50-home .f50-cell-detail{padding:4px 0;grid-column:1/-1}
    .f50-home .f50-cell-detail .mud-cellline{font-size:.8rem;margin-top:4px;overflow-wrap:anywhere}
-   .f50-home .f50-hero-ambr{font-size:.7rem;line-height:1.4;margin-top:3px;overflow-wrap:anywhere;color:var(--text-muted,#666)}
-   .f50-home .f50-qci{font-size:.8rem;justify-content:flex-start;gap:7px;margin-top:5px}
+   .f50-home .f50-hero-ambr{white-space:nowrap;flex-shrink:0}
+   .f50-home #mud-hero-band{display:none}
+   .f50-home #mud-op{font-size:.78rem;white-space:normal;line-height:1.4}
+   .f50-home .f50-qci{display:flex;align-items:center;font-size:.8rem;justify-content:flex-start;gap:5px;margin-top:5px;border:0;padding:0}
    .f50-home .mud-hero-r .mud-rsrp{font-size:1.7rem;line-height:1.2}
    .f50-home .mud-hero-r .mud-chips{justify-content:flex-end;gap:4px;flex-wrap:wrap}
    .f50-home .mud-hero-r .mud-chip{font-size:.7rem;padding:3px 5px}
@@ -394,12 +404,13 @@ return view.extend({
  drawRates: function() {
   var el=this._root.querySelector('#mud-rate-chart'),self=this;
   if(!el || this.dlHist.length<1)return;
+  var historySize=Math.max(1,this.dlHist.length-1);
   var peak=Math.max(1,Math.max.apply(null,this.dlHist.concat(this.ulHist))),left=0,right=900,top=12,bottom=186;
   var divisor=peak>=1048576?1048576:peak>=1024?1024:1,unit=divisor===1048576?'MB/s':divisor===1024?'KB/s':'B/s';
   var normalized=peak/divisor,power=Math.pow(10,Math.floor(Math.log10(normalized))),fraction=normalized/power;
   peak=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power*divisor;
   function tick(value){return Number((value/divisor).toPrecision(2)).toString();}
-  function pts(arr){return arr.map(function(v,i){return (left+i/(RATE_WIN-1)*(right-left)).toFixed(1)+','+(bottom-Math.max(0,v)/peak*(bottom-top)).toFixed(1);}).join(' ');}
+  function pts(arr){return arr.map(function(v,i){return (left+i/historySize*(right-left)).toFixed(1)+','+(bottom-Math.max(0,v)/peak*(bottom-top)).toFixed(1);}).join(' ');}
   var grid='';for(var j=0;j<=2;j++){var y=top+j/2*(bottom-top);grid+='<line x1="0" y1="'+y+'" x2="900" y2="'+y+'" stroke="currentColor" opacity=".09"/>';}
   el.innerHTML='<div class="f50-rate-axis"><span>'+tick(peak)+'<small>'+unit+'</small></span><span>'+tick(peak/2)+'</span><span>0</span></div><svg class="f50-rate-svg" role="img" aria-label="上下行速率历史曲线" viewBox="0 0 900 200" preserveAspectRatio="none">'+grid+'<polyline data-series="download" points="'+pts(this.dlHist)+'" stroke="var(--f50-dl,#0066cc)" fill="none" stroke-width="3.5" vector-effect="non-scaling-stroke"/><polyline data-series="upload" points="'+pts(this.ulHist)+'" stroke="var(--f50-ul,#d45d00)" fill="none" stroke-width="3.5" vector-effect="non-scaling-stroke"/><line id="mud-rate-cursor" y1="12" y2="186" stroke="currentColor" opacity=".4" style="display:none"/></svg>';
   function time(t){return new Date(t).toLocaleTimeString('zh-CN',{hour12:false});}
@@ -408,8 +419,8 @@ return view.extend({
   M.set('rate-window','最近 '+Math.round(seconds)+' 秒 / '+this.rateTimes.length+' 点');
   el.onpointermove=el.onpointerdown=function(e){
    var r=el.querySelector('svg').getBoundingClientRect(),x=(e.clientX-r.left)/r.width*900;
-   var n=Math.max(0,Math.min(self.dlHist.length-1,Math.round((x-left)/(right-left)*(RATE_WIN-1))));
-   var cursor=el.querySelector('#mud-rate-cursor'),cx=left+n/(RATE_WIN-1)*(right-left);
+   var n=Math.max(0,Math.min(self.dlHist.length-1,Math.round((x-left)/(right-left)*historySize)));
+   var cursor=el.querySelector('#mud-rate-cursor'),cx=left+n/historySize*(right-left);
    cursor.style.display='';cursor.setAttribute('x1',cx);cursor.setAttribute('x2',cx);
    M.set('rate-detail',time(self.rateTimes[n])+' · 下行 '+M.fmtRate(self.dlHist[n])+' · 上行 '+M.fmtRate(self.ulHist[n]));
    self._root.querySelector('#mud-rate-detail').style.display='';
@@ -522,6 +533,8 @@ return view.extend({
 
 	update: function(st) {
 		var i = st.info || {};
+        if(st.previousCpu)this.lastCpu=st.previousCpu;
+        if(st.history && st.history.length){this.dlHist=st.history.map(function(p){return p[1];});this.ulHist=st.history.map(function(p){return p[2];});this.rateTimes=st.history.map(function(p){return p[0]*1000;});var latest=st.history[st.history.length-1];M.set("dl",M.fmtRate(latest[1]));M.set("ul",M.fmtRate(latest[2]));this.drawRates();}
 		this.lastInfo = i;
 		if (i.ts && this._bootEl) {
 			this._bootEl.classList.remove('mud-booting');
@@ -587,7 +600,7 @@ return view.extend({
 			var plmn5 = imsi.substring(0, 5), plmn6 = imsi.substring(0, 6);
 			oper = M.PLMN_CN[plmn5] || M.PLMN_CN[plmn6] || plmn5;
 		}
-		M.set('op', oper.replace('中国广电','广电'));var shortBands=[];if(c && c.nr && c.nr.band)shortBands.push('n'+c.nr.band+(c.nr.bw_mhz?' · '+c.nr.bw_mhz+' MHz':''));if(c && c.lte && c.lte.band)shortBands.push('B'+c.lte.band);M.set('hero-band',shortBands.join(' / ') || '等待网络');
+		M.set('op', oper.replace('中国广电','广电'));var shortBands=[];if(c && c.nr && c.nr.band)shortBands.push('n'+c.nr.band+(c.nr.bw_mhz?' · '+c.nr.bw_mhz+' MHz':''));if(c && c.lte && c.lte.band)shortBands.push('B'+c.lte.band);M.set('op',oper.replace('中国广电','广电')+' · '+(shortBands.join(' / ') || '等待网络'));M.set('hero-band','');
 
 		var cl = [];
 		if (c && c.nr && c.nr.band) cl.push('n' + c.nr.band + (c.nr.bw_mhz ? ' · ' + c.nr.bw_mhz + ' MHz' : '') + ' · PCI ' + c.nr.pci + ' · ARFCN ' + c.nr.arfcn);
@@ -612,11 +625,11 @@ return view.extend({
 		M.v('radio-metrics').innerHTML = radioMetrics || radioMetricRows('', 'nr', null);
 		M.set('bw', nrk && nrk.bw_mhz ? nrk.bw_mhz + ' MHz' : (c && c.lte && c.lte.bw) || '--');
 		var qos = c && c.qos;
-		M.set('qci', qos && qos.qci != null ? qos.qci : '--');
-		M.set('ambr', qos && qos.dl != null ? qos.dl + ' / ' + qos.ul + ' Mbps' : '--');M.set('hero-ambr',qos && qos.dl != null ? 'AMBR 下 / 上：'+qos.dl+' / '+(qos.ul != null?qos.ul:'--')+' Mbps':'AMBR 下 / 上：--');
+		M.set('qci', qos && qos.qci != null ? qos.qci : '--');var qciValue=M.v('qci');qciValue.className='mud-q';qciValue.style.background='color-mix(in oklab,'+col+' 16%,transparent)';qciValue.style.color=col;
+		M.set('ambr', qos && qos.dl != null ? qos.dl + ' / ' + qos.ul + ' Mbps' : '--');M.set('hero-ambr',qos && qos.dl != null ? qos.dl+' / '+(qos.ul != null?qos.ul:'--')+' Mbps':'--');
 
 		var net = (i.net && (i.net.mobile || i.net.sipa_eth0)) || null;
-		if (net && this.lastNet && i.ts && this.lastNet.ts) {
+		if (!st.history && net && this.lastNet && i.ts && this.lastNet.ts) {
 			var dt = i.ts - this.lastNet.ts;
 			if (dt > 0) {
 				var dl = (net.rx - this.lastNet.rx) / dt, ul = (net.tx - this.lastNet.tx) / dt;

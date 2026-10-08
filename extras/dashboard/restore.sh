@@ -3,6 +3,7 @@ set -eu
 backup=$(cd "$(dirname "$0")" && pwd)
 case "$backup" in /root/f50-dashboard-backups/*) :;; *) echo '请从实际备份目录运行本脚本'; exit 1;; esac
 [ -f "$backup/paths" ] || exit 1
+[ ! -x /etc/init.d/f50history ] || { /etc/init.d/f50history stop; /etc/init.d/f50history disable; }
 /etc/init.d/vnstat stop
 [ ! -x /etc/init.d/f50power ] || /etc/init.d/f50power disable
 while IFS= read -r path; do
@@ -20,4 +21,5 @@ else
  /opt/mu300/bin/mu300-toolkit profile balanced >/dev/null
 fi
 /etc/init.d/rpcd restart
+if [ -x /etc/init.d/f50history ] && [ "$(cat "$backup/f50history.enabled" 2>/dev/null || echo 0)" = 1 ]; then /etc/init.d/f50history enable; /etc/init.d/f50history start; fi
 echo '页面与配置已恢复；流量数据库保留在原目录或 /opt/vnstat，不删除历史记录。重新登录并强制刷新首页。'

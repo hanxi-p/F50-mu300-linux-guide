@@ -18,6 +18,7 @@ if chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d
 /etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo 0 > "$backup/vnstat.enabled"; fi
 if /etc/init.d/vnstat running; then echo 1 > "$backup/vnstat.running"; else echo 0 > "$backup/vnstat.running"; fi
 if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$backup/f50power.enabled"; else echo 0 > "$backup/f50power.enabled"; fi
+if [ -x /etc/init.d/f50history ] && /etc/init.d/f50history enabled; then echo 1 > "$backup/f50history.enabled"; else echo 0 > "$backup/f50history.enabled"; fi
 cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/view/mu300/home.js
 /usr/libexec/unisoc-modem/dashboard-info
@@ -40,11 +41,19 @@ cat > "$backup/paths" <<'PATHS'
 /etc/init.d/f50power
 /usr/share/rpcd/acl.d/luci-app-f50power.json
 /etc/config/f50dashboard
+/etc/config/luci
+/www/luci-static/resources/f50powerlittle.js
+/www/luci-static/resources/f50openclash2.js
+/usr/libexec/rpcd/f50history
+/usr/libexec/f50history-worker
+/etc/init.d/f50history
+/usr/share/rpcd/acl.d/luci-app-f50history.json
 PATHS
 while IFS= read -r path; do
  if [ -e "$path" ]; then mkdir -p "$backup$(dirname "$path")"; cp -p "$path" "$backup$path"; fi
 done < "$backup/paths"
 cp restore.sh "$backup/restore.sh"
+[ ! -x /etc/init.d/f50history ] || /etc/init.d/f50history stop
 /etc/init.d/vnstat stop
 old_dir=$(vnstat --showconfig | awk '/^[;]?DatabaseDir / {gsub(/"/,"",$2); print $2; exit}')
 case "$old_dir" in /tmp*|/var*|'')
@@ -88,6 +97,12 @@ f50power /usr/libexec/rpcd/f50power
 f50power-worker /usr/libexec/f50power-worker
 f50power-init /etc/init.d/f50power
 luci-app-f50power.json /usr/share/rpcd/acl.d/luci-app-f50power.json
+f50power.js /www/luci-static/resources/f50powerlittle.js
+f50openclash.js /www/luci-static/resources/f50openclash2.js
+f50history /usr/libexec/rpcd/f50history
+f50history-worker /usr/libexec/f50history-worker
+f50history-init /etc/init.d/f50history
+luci-app-f50history.json /usr/share/rpcd/acl.d/luci-app-f50history.json
 FILES
 chmod 755 /usr/libexec/unisoc-modem/dashboard-info /usr/libexec/rpcd/f50quota /usr/libexec/rpcd/f50channel /usr/libexec/rpcd/f50openclash /usr/libexec/f50openclash-worker
 chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
@@ -95,7 +110,13 @@ chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f5
 /etc/init.d/f50power start
 /etc/init.d/vnstat enable
 /etc/init.d/vnstat start
+chmod 755 /usr/libexec/rpcd/f50history /usr/libexec/f50history-worker /etc/init.d/f50history
+# Session lifetime is LuCI sauth.sessiontime, not rpcd executable timeout.
+uci set luci.sauth.sessiontime=7200
+uci commit luci
 /etc/init.d/rpcd restart
+/etc/init.d/f50history enable
+/etc/init.d/f50history start
 printf '安装完成；请重新登录并强制刷新首页。\n原页面和配置备份：%s\n恢复命令：sh %s/restore.sh\n' "$backup" "$backup"
 ubus call f50power status >/dev/null
 ubus call f50quota status >/dev/null

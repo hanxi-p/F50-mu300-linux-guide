@@ -1,0 +1,11 @@
+#!/bin/sh
+case "$1" in
+list) echo '{"status":{}}';;
+call)
+ [ "$2" = status ] || exit 1
+ D=/tmp/f50-dashboard-live
+ printf '{"snapshot":'; cat "$D/status.json" 2>/dev/null || printf '{}'
+ printf ',"previous":'; cat "$D/previous.json" 2>/dev/null || printf '{}'
+ printf ',"history":'; cat "$D/history.json" 2>/dev/null || printf '[]'
+ printf '}\n';;
+esac
