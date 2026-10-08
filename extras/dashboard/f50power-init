@@ -1,0 +1,11 @@
+#!/bin/sh /etc/rc.common
+START=99
+start() {
+ (
+  sleep 12
+  /usr/libexec/unisoc-modem/at 'AT+CNUM' 2>/dev/null | sed -n 's/^+CNUM: *"[^"]*","\([+0-9]*\)".*/\1/p' | head -1 > /run/f50-phone-number
+  chmod 600 /run/f50-phone-number
+  mode=$(uci -q get f50dashboard.power.mode || echo performance)
+  mkdir /tmp/f50power.lock 2>/dev/null && /usr/libexec/f50power-worker "$mode"
+ ) </dev/null >/tmp/f50power-boot.log 2>&1 &
+}

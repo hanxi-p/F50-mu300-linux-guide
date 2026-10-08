@@ -1,0 +1,27 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+LOCK=/tmp/f50power.lock
+fail(){ json_init; json_add_boolean ok 0; json_add_string error "$1"; json_dump; }
+case "$1" in
+list) echo '{"status":{},"set":{"mode":"String"}}';;
+call)
+ case "$2" in
+ status)
+  if [ -d "$LOCK" ]; then p=$(cat "$LOCK/pid" 2>/dev/null); if [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null; then rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null; fi; fi
+  json_init; json_add_boolean ok 1
+  json_add_string mode "$(uci -q get f50dashboard.power.mode || echo performance)"
+  json_add_string online "$(cat /sys/devices/system/cpu/online)"
+  json_add_string max_khz "$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_max_freq)"
+  json_add_string phone "$(cat /run/f50-phone-number 2>/dev/null)"
+  json_add_string error "$(cat /tmp/f50power-error 2>/dev/null)"
+  if [ -d "$LOCK" ]; then json_add_boolean busy 1; else json_add_boolean busy 0; fi
+  json_dump;;
+ set)
+  json_load "$(cat)" || { fail '请求格式错误'; exit; }; json_get_var mode mode
+  case "$mode" in performance|eco) ;; *) fail '无效模式'; exit;; esac
+  mkdir "$LOCK" 2>/dev/null || { fail '正在切换，请稍候'; exit; }
+  setsid /usr/libexec/f50power-worker "$mode" </dev/null >/tmp/f50power-control.log 2>&1 &
+  json_init; json_add_boolean ok 1; json_dump;;
+ esac;;
+esac

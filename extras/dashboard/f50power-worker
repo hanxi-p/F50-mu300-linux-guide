@@ -1,0 +1,35 @@
+#!/bin/sh
+set -eu
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/bin
+LOCK=/tmp/f50power.lock
+restore() {
+ for n in 0 1 2 3 4 5 6 7; do [ ! -e /sys/devices/system/cpu/cpu$n/online ] || echo 1 > /sys/devices/system/cpu/cpu$n/online; done
+ /opt/mu300/bin/mu300-toolkit profile balanced >/dev/null
+}
+cleanup() { rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null || true; }
+trap cleanup EXIT
+printf '%s' $$ > "$LOCK/pid"
+case "${1:-}" in performance|eco) mode=$1;; *) exit 1;; esac
+rm -f /tmp/f50power-error
+# Keep all four little cores CPU0-CPU3 for networking headroom.
+# Never change thermal trips, voltage tables, radio bands or Wi-Fi power.
+restore
+if [ "$mode" = eco ]; then
+ if ! /opt/mu300/bin/mu300-toolkit profile eco >/dev/null; then restore; echo '动态调频设置失败' > /tmp/f50power-error; exit 1; fi
+ for n in 7 6 5 4; do
+  if ! echo 0 > /sys/devices/system/cpu/cpu$n/online; then
+   restore; echo '核心关闭失败，已恢复全核' > /tmp/f50power-error; exit 1
+  fi
+ done
+ [ "$(cat /sys/devices/system/cpu/online)" = 0-3 ] || { restore; echo '在线核心不符合预期，已恢复全核' > /tmp/f50power-error; exit 1; }
+ # A local web health check catches a failed userspace transition without relying on WAN registration.
+ sleep 3
+ if ! curl -s --max-time 8 -o /dev/null http://127.0.0.1/; then
+  restore; echo '管理服务检查失败，已恢复全核' > /tmp/f50power-error; exit 1
+ fi
+fi
+[ -f /etc/config/f50dashboard ] || : > /etc/config/f50dashboard
+uci -q get f50dashboard.power >/dev/null || uci set f50dashboard.power=power
+uci set f50dashboard.power.mode="$mode"
+uci commit f50dashboard
+logger -t f50power "mode=$mode online=$(cat /sys/devices/system/cpu/online)"

@@ -105,13 +105,14 @@ FW=$(sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'$/\1/p" /etc/openwrt_release 2>/dev/
 read -r _cpu _u _n _s _i _w _irq _sirq _st _rest < /proc/stat
 CPU_TOTAL=$(( _u + _n + _s + _i + _w + _irq + _sirq + _st ))
 CPU_IDLE=$(( _i + _w ))
-CPU_CORES=$(awk '/^cpu[0-9]+ / {total=0; for(i=2;i<=9;i++) total+=$i; printf "%s{\"id\":\"%s\",\"total\":%.0f,\"idle\":%.0f}",sep,$1,total,$5+$6;sep=","}' /proc/stat)
+CPU_CORES=$(awk '/^cpu[0-9]+ / {n=substr($1,4)+0;t[n]=0;for(i=2;i<=9;i++)t[n]+=$i;idle[n]=$5+$6} END {for(n=0;n<8;n++){file="/sys/devices/system/cpu/cpu"n"/online";on=1;if((getline v < file)>0)on=v+0;close(file);printf "%s{\"id\":\"cpu%d\",\"total\":%.0f,\"idle\":%.0f,\"online\":%d}",sep,n,t[n],idle[n],on;sep=","}}' /proc/stat)
 CPUN=$(grep -c '^processor' /proc/cpuinfo)
 # one freq pair per policy (big.LITTLE shows two; the page averages or shows both)
 FREQS=
 for p in /sys/devices/system/cpu/cpufreq/policy*/scaling_cur_freq; do
     [ -r "$p" ] || continue
     d=$(dirname "$p")
+    [ -n "$(rd "$d/affected_cpus")" ] || continue
     FREQS="$FREQS{\"cur\":$(n_or_null "$(rd "$p")"),\"max\":$(n_or_null "$(rd "$d/cpuinfo_max_freq")")},"
 done
 FREQS=${FREQS%,}

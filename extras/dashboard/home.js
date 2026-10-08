@@ -5,6 +5,7 @@
 'require f50quota5 as F50Quota';
 'require f50channel as F50Channel';
 'require f50openclash as F50OpenClash';
+'require f50power as F50Power';
 
 /* MU300 status dashboard -- the LuCI landing page (menu.d hangs it at admin/home).
  *
@@ -74,6 +75,7 @@ return view.extend({
 		this._channelDispose = F50Channel.mount(root);
 		this._quotaDispose = F50Quota.mount(root);
 		this._openclashDispose = F50OpenClash.mount(root);
+		this._powerDispose = F50Power.mount(root);
 		var self = this;
 		var intervalMs = DEFAULT_POLL_S * 1000;
 		var config = L.resolveDefault(uci.load('unisoc_modem')).then(function() {
@@ -103,6 +105,7 @@ return view.extend({
 		if (this._channelDispose) this._channelDispose();
 		if (this._quotaDispose) this._quotaDispose();
 		if (this._openclashDispose) this._openclashDispose();
+		if (this._powerDispose) this._powerDispose();
 	},
 
 	html: function() {
@@ -125,7 +128,7 @@ return view.extend({
 <div class="mud-card mud-body">
 
 <div class="mud-sec">
-  <h3>${_('Link & traffic')}</h3>
+  <h3>流量</h3>
   <div class="f50-combined-chart" style="width:100%">
     <div class="f50-rate-head">
       <div class="f50-rate-download"><b id="mud-dl">--</b><span>下行速率</span></div>
@@ -153,6 +156,7 @@ return view.extend({
     <div>
       <div class="mud-rows">
         <div class="mud-r"><span class="mud-k">IPv4 / IPv6</span><span class="mud-v" id="mud-ip">--</span></div>
+        <div class="mud-r"><span class="mud-k">手机号</span><span class="mud-v" id="mud-phone">读取中…</span></div>
         <div class="mud-r"><span class="mud-k">APN</span><span class="mud-v" id="mud-apn">--</span></div>
         <div class="mud-r"><span class="mud-k">${_('Session duration')}</span><span class="mud-v" id="mud-sess">--</span></div>
         <div class="mud-r"><span class="mud-k">${_('Registration')}</span><span class="mud-v" id="mud-reg">--</span></div>
@@ -181,7 +185,7 @@ return view.extend({
   <div class="mud-temp" id="mud-temps"></div>
   <div class="mud-kpis" style="margin-top:8px">
     <div class="mud-kpi"><b id="mud-cpu">--</b><span>${_('CPU usage')}</span><div class="mud-meter"><i id="mud-cpu-bar" style="background:var(--brand,var(--primary,#3b82f6))"></i></div></div>
-    <div class="mud-kpi"><b id="mud-ram">--</b><span>${_('Memory')} · <span class="mud-sub" id="mud-ram-sub">--</span></span><div class="mud-meter"><i id="mud-ram-bar" style="background:var(--info,#0ea5e9)"></i></div></div>
+    <div class="mud-kpi"><b id="mud-ram">--</b><span>${_('Memory')}<span class="mud-sub" id="mud-ram-sub">--</span></span><div class="mud-meter"><i id="mud-ram-bar" style="background:var(--info,#0ea5e9)"></i></div></div>
     <div class="mud-kpi"><b id="mud-disk">--</b><span>${_('Storage')}</span><div class="mud-meter"><i id="mud-disk-bar" style="background:var(--warning,#f59e0b)"></i></div></div>
     <div class="mud-kpi" id="mud-batt-kpi" style="display:none"><b id="mud-batt">--</b><span id="mud-batt-l">${_('Battery')}</span></div>
   </div>
@@ -226,9 +230,12 @@ return view.extend({
 
 <div class="mud-sec">
   <h3>${_('Quick controls')}</h3>
-  <div class="mud-ctl" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+  <div class="mud-ctl f50-primary-controls">
     <button class="mud-btn" id="mud-btn-data">流量开关</button>
+    <button class="mud-btn" id="mud-btn-power">温控模式</button>
+    <button class="mud-btn" id="mud-btn-5g">自动 5G</button>
     <button class="mud-btn" id="mud-btn-openclash" aria-pressed="false">OpenClash · 读取状态…</button>
+    <button class="mud-btn" id="mud-btn-other" aria-expanded="false">其他与重启</button>
     <button class="mud-btn" id="mud-btn-wifi">Wi-Fi 开关</button>
     <button class="mud-btn" id="mud-btn-channel">信道设置</button>
     <button class="mud-btn warn" id="mud-btn-modem">${_('Restart modem')}</button>
@@ -305,18 +312,83 @@ return view.extend({
    var d=E('details',{class:'f50-details',style:'margin:16px 0'},[E('summary',{style:'cursor:pointer;font-weight:600'},title)]);
    before.parentNode.insertBefore(d,before); nodes.forEach(function(n){d.appendChild(n);}); return d;
   }
-  var secs=root.querySelectorAll('.mud-body > .mud-sec'),link=secs[0],device=secs[1];
+  var secs=root.querySelectorAll('.mud-body > .mud-sec'),link=secs[0],device=secs[1],quick=secs[2],locks=secs[3];
+  var heroRight=root.querySelector('.mud-hero-r');
+  heroRight.prepend(E('div',{class:'f50-signal-title'},'信号详情'));
   var qci=root.querySelector('#mud-qci').parentNode;
-  qci.style.cssText='margin:8px 0;font-size:1.05em';
-  link.insertBefore(qci,link.querySelector('.f50-combined-chart'));
-  var cols=link.querySelector('.mud-cols');wrap([cols],'蜂窝连接详情',cols);
+  qci.classList.add('f50-qci');heroRight.appendChild(qci);
+  var cols=link.querySelector('.mud-cols');var cellLine=root.querySelector('#mud-cellline');cellLine.replaceWith(E('div',{class:'f50-hero-band',id:'mud-hero-band'},'--'));cols.prepend(E('div',{class:'f50-cell-detail'},[E('b',{},'基站与小区'),cellLine]));wrap([cols],'蜂窝网络详情',cols);
   device.querySelector('h3').textContent='设备负载与温度';
-  var kpis=device.querySelector('.mud-kpis'),extra=E('div',{class:'mud-kpis',style:'margin-top:12px'});
+  var kpis=device.querySelector('.mud-kpis'),extra=E('div',{class:'mud-kpis'});
   ['disk','batt'].forEach(function(id){extra.appendChild(root.querySelector('#mud-'+id).parentNode);});
-  kpis.insertAdjacentElement('afterend',E('div',{id:'mud-cpu-cores',class:'f50-core-grid','aria-label':'各 CPU 核心占用'}));
-  var freq=root.querySelector('#mud-freqs'),dcols=device.querySelector('.mud-cols'),leases=root.querySelector('#mud-leases'),android=root.querySelector('#mud-btn-android').parentNode;
-  var details=wrap([extra,freq,dcols,leases,android],'无线、局域网与设备详情',freq);
-  var heroRight=root.querySelector('.mud-hero-r');wrap([heroRight],'信号详情',heroRight);
+  var temp=E('div',{class:'mud-kpi f50-average-temp'},[E('b',{id:'mud-temp-average'},'--'),E('span',{},'')]);
+  kpis.appendChild(temp);
+  var temps=root.querySelector('#mud-temps');temp.appendChild(temps);
+  var cores=E('div',{id:'mud-cpu-cores',class:'f50-core-grid','aria-label':'各 CPU 核心占用'});
+  var freq=root.querySelector('#mud-freqs');
+  var cpuDetails=E('div',{id:'f50-cpu-details',hidden:true,class:'f50-cpu-details'},[cores,freq]);
+  kpis.insertAdjacentElement('afterend',cpuDetails);
+  var cpuCard=root.querySelector('#mud-cpu').parentNode;
+  cpuCard.setAttribute('role','button');cpuCard.setAttribute('tabindex','0');cpuCard.setAttribute('aria-expanded','false');cpuCard.setAttribute('aria-controls','f50-cpu-details');cpuCard.classList.add('f50-cpu-toggle');
+  cpuCard.onclick=function(){cpuDetails.hidden=!cpuDetails.hidden;cpuCard.setAttribute('aria-expanded',String(!cpuDetails.hidden));};
+  cpuCard.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();cpuCard.click();}};
+  var dcols=device.querySelector('.mud-cols'),leases=root.querySelector('#mud-leases'),android=root.querySelector('#mud-btn-android').parentNode;
+  wrap([extra,dcols,leases,android],'无线、局域网与设备详情',dcols);
+  var other=E('div',{id:'f50-other-controls',class:'mud-ctl f50-other-controls',hidden:true});quick.appendChild(other);
+  ['wifi','channel','modem','reboot','android'].forEach(function(id){other.appendChild(root.querySelector('#mud-btn-'+id));});android.remove();
+  var otherBtn=root.querySelector('#mud-btn-other');otherBtn.setAttribute('aria-controls','f50-other-controls');
+  otherBtn.onclick=function(){other.hidden=!other.hidden;otherBtn.setAttribute('aria-expanded',String(!other.hidden));};
+  var lockTable=locks.querySelector('.mud-scroll');locks.querySelector('h3').remove();
+  var lockContent=E('div',{id:'f50-lock-details',hidden:true},[E('a',{class:'mud-btn',href:L.url('admin','modem','locks'),style:'display:inline-block;margin:6px 0'},'设置制式与频段'),lockTable]);
+  var lockBtn=E('button',{class:'mud-btn',id:'mud-btn-locks','aria-expanded':'false','aria-controls':'f50-lock-details'},'锁制式与频段');
+  root.querySelector('.f50-primary-controls').appendChild(lockBtn);locks.appendChild(lockContent);
+  lockBtn.onclick=function(){lockContent.hidden=!lockContent.hidden;lockBtn.setAttribute('aria-expanded',String(!lockContent.hidden));};
+  root.appendChild(E('style',{},`
+   .f50-home [hidden]{display:none!important}
+   .f50-home .mud-hero{align-items:flex-start;display:flex;flex-wrap:nowrap}
+   .f50-home .mud-hero-l{flex:1 1 52%;min-width:0}
+   .f50-home .mud-hero-r{flex:1 1 48%;min-width:0;text-align:right;flex-direction:column;align-items:flex-end;gap:5px;padding-top:0}
+   .f50-home .f50-signal-title{font-size:.78rem;font-weight:750;line-height:1.2;margin-bottom:5px;white-space:nowrap}
+   .f50-home .f50-hero-band{font-size:.8rem;color:var(--text-muted,#666);margin-top:4px}
+   .f50-home .f50-cell-detail{padding:4px 0;grid-column:1/-1}
+   .f50-home .f50-cell-detail .mud-cellline{font-size:.8rem;margin-top:4px;overflow-wrap:anywhere}
+   .f50-home .f50-qci{font-size:1rem;justify-content:flex-end;gap:9px;margin-top:5px}
+   .f50-home .mud-hero-r .mud-rsrp{font-size:1.7rem;line-height:1.2}
+   .f50-home .mud-hero-r .mud-chips{justify-content:flex-end;gap:4px;flex-wrap:wrap}
+   .f50-home .mud-hero-r .mud-chip{font-size:.7rem;padding:3px 5px}
+   .f50-home .mud-hero-l .mud-cellline{overflow-wrap:anywhere;font-size:.72rem}
+   .f50-home .mud-sec:nth-child(2)>.mud-kpis{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:0!important}
+   .f50-home .mud-sec:nth-child(2)>.mud-kpis b{font-size:1.4rem}
+   .f50-home .f50-average-temp{border:1px solid var(--border-color,rgba(127,127,127,.28));border-radius:8px}
+   .f50-home .f50-cpu-toggle{cursor:pointer}
+   .f50-home .f50-cpu-toggle>span:after{content:' ▾'}
+   .f50-home .f50-cpu-toggle[aria-expanded=true]>span:after{content:' ▴'}
+   .f50-home #mud-ram-sub{display:block}
+   .f50-home #mud-temps{display:grid;grid-template-columns:1fr;gap:2px;margin:4px 0 0}
+   .f50-home #mud-temps span{display:block;font-size:.65rem;padding:0;border:0;text-align:left;white-space:nowrap}
+   .f50-home .f50-other-controls{margin-top:6px;grid-template-columns:repeat(2,minmax(0,1fr))}
+   .f50-home .f50-primary-controls{grid-template-columns:repeat(6,minmax(0,1fr))}
+   .f50-home .mud-ctl .mud-btn{background:#fff;color:#263238;border-color:#dce1e5}
+   .f50-home .mud-ctl .mud-btn.on,.f50-home .mud-ctl .mud-btn[aria-pressed=true],.f50-home .mud-ctl .mud-btn[aria-expanded=true]{background:#008cba;border-color:#008cba;color:#fff}
+   .f50-home #mud-btn-power{white-space:normal;overflow-wrap:anywhere;line-height:1.25}
+   .f50-home #mud-btn-power[data-mode=performance]{background:#d63b3b;border-color:#d63b3b;color:#fff}
+   .f50-home #mud-btn-power[data-mode=eco]{background:#238b45;border-color:#238b45;color:#fff}
+   .f50-home #mud-btn-5g[data-mode="4g"]{background:#238b45;border-color:#238b45;color:#fff}
+   @media(max-width:600px){
+    .f50-home .f50-primary-controls{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+    .f50-home .f50-primary-controls>.mud-btn{grid-column:auto;padding-left:2px;padding-right:2px;font-size:.7rem;min-width:0}
+    .f50-home .mud-hero-l{flex-basis:52%}
+    .f50-home .mud-hero-r{flex-basis:48%}
+    .f50-home .f50-signal-title{font-size:.78rem}
+    .f50-home .mud-hero-r .mud-rsrp{font-size:1.7rem}
+    .f50-home .mud-hero-r .mud-chips{gap:3px}
+    .f50-home .mud-sec:nth-child(2)>.mud-kpis .mud-kpi{padding:7px 6px}
+    .f50-home .mud-sec:nth-child(2)>.mud-kpis span{font-size:.68rem}
+    .f50-home #mud-ram-sub{display:block;overflow-wrap:anywhere}
+    .f50-home #mud-temps{grid-template-columns:1fr}
+    .f50-home #mud-temps span{font-size:.62rem}
+   }
+  `));
  },
  drawRates: function() {
   var el=this._root.querySelector('#mud-rate-chart'),self=this;
@@ -514,7 +586,7 @@ return view.extend({
 			var plmn5 = imsi.substring(0, 5), plmn6 = imsi.substring(0, 6);
 			oper = M.PLMN_CN[plmn5] || M.PLMN_CN[plmn6] || plmn5;
 		}
-		M.set('op', score != null ? _('%s · Signal %s %s/10').format(oper, label, score.toFixed(1)) : _('%s · Signal %s').format(oper, label));
+		M.set('op', oper.replace('中国广电','广电'));var shortBands=[];if(c && c.nr && c.nr.band)shortBands.push('n'+c.nr.band+(c.nr.bw_mhz?' · '+c.nr.bw_mhz+' MHz':''));if(c && c.lte && c.lte.band)shortBands.push('B'+c.lte.band);M.set('hero-band',shortBands.join(' / ') || '等待网络');
 
 		var cl = [];
 		if (c && c.nr && c.nr.band) cl.push('n' + c.nr.band + (c.nr.bw_mhz ? ' · ' + c.nr.bw_mhz + ' MHz' : '') + ' · PCI ' + c.nr.pci + ' · ARFCN ' + c.nr.arfcn);
@@ -620,6 +692,8 @@ return view.extend({
 			: '';
 
 		var t = i.temps || {};
+		var tempValues=[t.soc,t.cpu,t.modem,t.board];
+		M.set('temp-average',tempValues.every(function(v){return v!=null && Number.isFinite(Number(v));})?(tempValues.reduce(function(a,v){return a+Number(v);},0)/4).toFixed(1)+'°C':'--');
 		M.v('temps').innerHTML = [ [ 'SoC', t.soc ], [ 'CPU', t.cpu ], [ _('Modem'), t.modem ], [ _('Board'), t.board ] ]
 			.filter(function(x) { return x[1] != null; })
 			.map(function(x) {
@@ -642,9 +716,9 @@ return view.extend({
 			var total = prev ? core.total - prev.total : 0, idle = prev ? core.idle - prev.idle : 0;
 			if (total > 0 && idle >= 0) corePercent[core.id] = Math.max(0, Math.min(100, Math.round((total-idle)*100/total)));
 			else if (!prev || total < 0 || idle < 0) corePercent[core.id] = null;
-			var value = corePercent[core.id];
+			var value = corePercent[core.id], offline = core.online === false || core.online === 0;
 			return E('div', {class:'f50-core'}, [
-				E('div',{class:'f50-core-head'},[E('span',{},core.id.toUpperCase()),E('b',{},value == null ? '—' : value+'%')]),
+				E('div',{class:'f50-core-head'},[E('span',{},core.id.toUpperCase()),E('b',{},offline ? '已关闭' : value == null ? '—' : value+'%')]),
 				E('div',{class:'mud-meter'},E('i',{style:'width:'+(value || 0)+'%;background:var(--f50-dl,#0066cc)'}))
 			]);
 		}));
@@ -661,7 +735,7 @@ return view.extend({
 		if (i.mem && i.mem.total_kb) {
 			var used = i.mem.total_kb - i.mem.avail_kb, pct = Math.round(used * 100 / i.mem.total_kb);
 			M.set('ram', pct + '%'); M.v('ram-bar').style.width = pct + '%';
-			M.set('ram-sub', _('Total %s · free %s').format(M.fmtBytes(i.mem.total_kb * 1024), M.fmtBytes(i.mem.avail_kb * 1024)));
+			var ramSub=this._root.querySelector('#mud-ram-sub'); ramSub.replaceChildren(E('span',{style:'display:block'},'余'+(i.mem.avail_kb/1048576).toFixed(1)+'G'),E('span',{style:'display:block'},'共'+(i.mem.total_kb/1048576).toFixed(1)+'G'));
 		}
 		if (i.storage && i.storage.total_kb) {
 			var pct2 = Math.round(i.storage.used_kb * 100 / i.storage.total_kb);
@@ -696,7 +770,7 @@ return view.extend({
 		if (androidBtn) androidBtn.style.display = i.capabilities && i.capabilities.dualboot ? '' : 'none';
 
 		var b;
-		b = M.v('btn-data'); b.className = 'mud-btn' + (w.up ? ' on' : ''); b.textContent = '流量 · ' + (w.up ? '已开启' : '已关闭'); b.setAttribute('aria-pressed', w.up ? 'true' : 'false');
-		b = M.v('btn-wifi'); b.className = 'mud-btn' + (wf.up ? ' on' : ''); b.textContent = 'Wi-Fi · ' + (wf.up ? '已开启' : '已关闭'); b.setAttribute('aria-pressed', wf.up ? 'true' : 'false');
+		b = M.v('btn-data'); b.className = 'mud-btn' + (w.up ? ' on' : ''); b.textContent = '流量'; b.setAttribute('aria-pressed', w.up ? 'true' : 'false');
+		b = M.v('btn-wifi'); b.className = 'mud-btn' + (wf.up ? ' on' : ''); b.textContent = 'Wi-Fi'; b.setAttribute('aria-pressed', wf.up ? 'true' : 'false');
 	}
 });

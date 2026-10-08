@@ -1,0 +1,1 @@
+{"luci-app-f50power":{"description":"F50 power profile and SIM phone display","read":{"ubus":{"f50power":["status"]}},"write":{"ubus":{"f50power":["set"]}}}}

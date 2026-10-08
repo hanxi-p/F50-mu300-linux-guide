@@ -14,9 +14,8 @@ return baseclass.extend({
             return status().then(function(s) {
                 state = s;
                 button.className = 'mud-btn' + (s.running ? ' on' : '');
-                button.disabled = waiting || s.busy || s.installed === false;
-                button.textContent = s.busy ? ('OpenClash · ' + (s.target === '1' ? '开启中…' : '关闭中…')) : 'OpenClash · ' + (s.running ? '已开启' : '已关闭');
-                if (s.installed === false) button.textContent = 'OpenClash · 未安装';
+                button.disabled = waiting || s.busy;
+                button.textContent = s.busy ? ('OpenClash · ' + (s.target === '1' ? '开启中…' : '关闭中…')) : 'OpenClash';
                 button.title = s.running ? '点击关闭 OpenClash，改为直连上网' : '点击开启 OpenClash';
                 button.setAttribute('aria-pressed', s.running ? 'true' : 'false');
                 if (s.error && s.error !== lastError) ui.addNotification(null, E('p', {}, s.error));

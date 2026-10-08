@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 [ "$(id -u)" = 0 ] || { echo '请使用 root SSH 执行'; exit 1; }
 version=$(cat /etc/mu300/image-version 2>/dev/null || true)
 [ "$version" = v2026.10.11 ] || { echo "此补丁匹配 v2026.10.11，当前为 $version；请先核对页面与 RPC 差异。"; exit 1; }
-for cmd in vnstat ubus uci jsonfilter setsid sha256sum; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd，请先安装对应依赖"; exit 1; }; done
+for cmd in vnstat ubus uci jsonfilter setsid sha256sum curl; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd，请先安装对应依赖"; exit 1; }; done
 [ -r /usr/libexec/unisoc-modem/dashboard-info ] && [ -r /www/luci-static/resources/view/mu300/home.js ] || { echo '缺少 MU300 面板'; exit 1; }
 ip link show sipa_eth0 >/dev/null || { echo '当前蜂窝接口不是 sipa_eth0，请先适配统计接口'; exit 1; }
 [ "$(uci -q get wireless.radio0.band)" = 5g ] && [ "$(uci -q get wireless.ap0.device)" = radio0 ] || { echo '此版本匹配 radio0 / ap0 和 5GHz 无线，请先适配'; exit 1; }
@@ -12,8 +12,12 @@ sha256sum -c SHA256SUMS >/dev/null
 backup="/root/f50-dashboard-backups/$(date +%Y%m%d-%H%M%S)-$$"
 mkdir -p "$backup"
 chmod 700 "$backup"
-if /etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo 0 > "$backup/vnstat.enabled"; fi
+if chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
+/etc/init.d/f50power enable
+/etc/init.d/f50power start
+/etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo 0 > "$backup/vnstat.enabled"; fi
 if /etc/init.d/vnstat running; then echo 1 > "$backup/vnstat.running"; else echo 0 > "$backup/vnstat.running"; fi
+if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$backup/f50power.enabled"; else echo 0 > "$backup/f50power.enabled"; fi
 cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/view/mu300/home.js
 /usr/libexec/unisoc-modem/dashboard-info
@@ -30,6 +34,12 @@ cat > "$backup/paths" <<'PATHS'
 /etc/config/f50quota
 /etc/config/vnstat
 /etc/vnstat.conf
+/www/luci-static/resources/f50power.js
+/usr/libexec/rpcd/f50power
+/usr/libexec/f50power-worker
+/etc/init.d/f50power
+/usr/share/rpcd/acl.d/luci-app-f50power.json
+/etc/config/f50dashboard
 PATHS
 while IFS= read -r path; do
  if [ -e "$path" ]; then mkdir -p "$backup$(dirname "$path")"; cp -p "$path" "$backup$path"; fi
@@ -73,12 +83,21 @@ f50openclash-worker /usr/libexec/f50openclash-worker
 luci-app-f50quota.json /usr/share/rpcd/acl.d/luci-app-f50quota.json
 luci-app-f50channel.json /usr/share/rpcd/acl.d/luci-app-f50channel.json
 luci-app-f50openclash.json /usr/share/rpcd/acl.d/luci-app-f50openclash.json
+f50power.js /www/luci-static/resources/f50power.js
+f50power /usr/libexec/rpcd/f50power
+f50power-worker /usr/libexec/f50power-worker
+f50power-init /etc/init.d/f50power
+luci-app-f50power.json /usr/share/rpcd/acl.d/luci-app-f50power.json
 FILES
 chmod 755 /usr/libexec/unisoc-modem/dashboard-info /usr/libexec/rpcd/f50quota /usr/libexec/rpcd/f50channel /usr/libexec/rpcd/f50openclash /usr/libexec/f50openclash-worker
+chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
+/etc/init.d/f50power enable
+/etc/init.d/f50power start
 /etc/init.d/vnstat enable
 /etc/init.d/vnstat start
 /etc/init.d/rpcd restart
 printf '安装完成；请重新登录并强制刷新首页。\n原页面和配置备份：%s\n恢复命令：sh %s/restore.sh\n' "$backup" "$backup"
+ubus call f50power status >/dev/null
 ubus call f50quota status >/dev/null
 ubus call f50channel status >/dev/null
 ubus call f50openclash status >/dev/null
