@@ -168,6 +168,8 @@ Codex 验收时核对 `/sys/devices/system/cpu/online`：能效为 `0-3`，性�
 
 验收四种开关组合，每种分别检查 DNS 与网页访问；关闭 AdGuard Home 时核对 Clash PID 不变，最后恢复用户原来的开关状态。本机四种组合已通过 DNS 和直连 HTTPS 检查，代理站点还取决于订阅节点。遇到某个网页循环刷新，核对该域名的拦截记录与代理连接，不能直接认定是广告过滤。
 
+**OpenClash 开启后绕过了 AdGuard Home？** OpenClash 的异步启动会在核心出现后再次写入 dnsmasq 上游；只在快捷开关或防火墙钩子里修正，可能被后续步骤覆盖。适配完成后执行 `sh extras/dashboard/f50-openclash-dns-order.sh`，在 OpenClash 的 `change_dnsmasq` 步骤后重新协调上游。脚本先备份原启动文件，重复执行不会重复插入；插件升级覆盖启动文件后需重新核对并应用。两者都开时必须实际检查 dnsmasq 上游为 `127.0.0.1#5353`、AdGuard Home 上游为 `127.0.0.1:7874`，不能只以网页可访问判断过滤生效。
+
 **首页长时间不更新？** 后台采集调用现在有 20 秒超时和强制退出保护，异常请求不会永久占住采集循环。最近五分钟曲线继续由后台记录，打开页面即可读取。
 
 **页面出现 `factory yields invalid constructor`？** LuCI 模块要用 `baseclass.extend(...)` 返回构造器。本文模块已经按该格式实现；更新后检查浏览器实际页面，不以“文件已写入”作为完成标志。
