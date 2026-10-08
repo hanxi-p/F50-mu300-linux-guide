@@ -316,7 +316,7 @@ return view.extend({
   var heroRight=root.querySelector('.mud-hero-r');
   heroRight.prepend(E('div',{class:'f50-signal-title'},'信号详情'));
   var qci=root.querySelector('#mud-qci').parentNode;
-  qci.classList.add('f50-qci');heroRight.appendChild(qci);
+  qci.classList.add('f50-qci');root.querySelector('.mud-hero-l').appendChild(qci);root.querySelector('.mud-hero-l').appendChild(E('div',{id:'mud-hero-ambr',class:'f50-hero-ambr'},'AMBR 下 / 上：--'));
   var cols=link.querySelector('.mud-cols');var cellLine=root.querySelector('#mud-cellline');cellLine.replaceWith(E('div',{class:'f50-hero-band',id:'mud-hero-band'},'--'));cols.prepend(E('div',{class:'f50-cell-detail'},[E('b',{},'基站与小区'),cellLine]));wrap([cols],'蜂窝网络详情',cols);
   device.querySelector('h3').textContent='设备负载与温度';
   var kpis=device.querySelector('.mud-kpis'),extra=E('div',{class:'mud-kpis'});
@@ -352,7 +352,8 @@ return view.extend({
    .f50-home .f50-hero-band{font-size:.8rem;color:var(--text-muted,#666);margin-top:4px}
    .f50-home .f50-cell-detail{padding:4px 0;grid-column:1/-1}
    .f50-home .f50-cell-detail .mud-cellline{font-size:.8rem;margin-top:4px;overflow-wrap:anywhere}
-   .f50-home .f50-qci{font-size:1rem;justify-content:flex-end;gap:9px;margin-top:5px}
+   .f50-home .f50-hero-ambr{font-size:.7rem;line-height:1.4;margin-top:3px;overflow-wrap:anywhere;color:var(--text-muted,#666)}
+   .f50-home .f50-qci{font-size:.8rem;justify-content:flex-start;gap:7px;margin-top:5px}
    .f50-home .mud-hero-r .mud-rsrp{font-size:1.7rem;line-height:1.2}
    .f50-home .mud-hero-r .mud-chips{justify-content:flex-end;gap:4px;flex-wrap:wrap}
    .f50-home .mud-hero-r .mud-chip{font-size:.7rem;padding:3px 5px}
@@ -612,7 +613,7 @@ return view.extend({
 		M.set('bw', nrk && nrk.bw_mhz ? nrk.bw_mhz + ' MHz' : (c && c.lte && c.lte.bw) || '--');
 		var qos = c && c.qos;
 		M.set('qci', qos && qos.qci != null ? qos.qci : '--');
-		M.set('ambr', qos && qos.dl != null ? qos.dl + ' / ' + qos.ul + ' Mbps' : '--');
+		M.set('ambr', qos && qos.dl != null ? qos.dl + ' / ' + qos.ul + ' Mbps' : '--');M.set('hero-ambr',qos && qos.dl != null ? 'AMBR 下 / 上：'+qos.dl+' / '+(qos.ul != null?qos.ul:'--')+' Mbps':'AMBR 下 / 上：--');
 
 		var net = (i.net && (i.net.mobile || i.net.sipa_eth0)) || null;
 		if (net && this.lastNet && i.ts && this.lastNet.ts) {
