@@ -21,6 +21,8 @@ if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$
 if [ -x /etc/init.d/f50history ] && /etc/init.d/f50history enabled; then echo 1 > "$backup/f50history.enabled"; else echo 0 > "$backup/f50history.enabled"; fi
 cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/view/mu300/home.js
+/usr/libexec/unisoc-modem/lock
+/usr/libexec/rpcd/mu300dash
 /usr/libexec/unisoc-modem/dashboard-info
 /www/luci-static/resources/f50quota5.js
 /www/luci-static/resources/f50channel.js
@@ -43,6 +45,7 @@ cat > "$backup/paths" <<'PATHS'
 /etc/config/f50dashboard
 /etc/config/luci
 /www/luci-static/resources/f50powerlittle.js
+/www/luci-static/resources/f50power20.js
 /www/luci-static/resources/f50openclash2.js
 /usr/libexec/rpcd/f50history
 /usr/libexec/f50history-worker
@@ -92,6 +95,8 @@ while IFS=' ' read -r src target; do
  cp "$src" "$target"
  chmod 644 "$target"
 done <<'FILES'
+modem-lock /usr/libexec/unisoc-modem/lock
+mu300dash /usr/libexec/rpcd/mu300dash
 home.js /www/luci-static/resources/view/mu300/home.js
 dashboard-info /usr/libexec/unisoc-modem/dashboard-info
 f50quota5.js /www/luci-static/resources/f50quota5.js
@@ -110,6 +115,7 @@ f50power-worker /usr/libexec/f50power-worker
 f50power-init /etc/init.d/f50power
 luci-app-f50power.json /usr/share/rpcd/acl.d/luci-app-f50power.json
 f50power.js /www/luci-static/resources/f50powerlittle.js
+f50power.js /www/luci-static/resources/f50power20.js
 f50openclash.js /www/luci-static/resources/f50openclash2.js
 f50history /usr/libexec/rpcd/f50history
 f50history-worker /usr/libexec/f50history-worker
@@ -123,6 +129,7 @@ luci-app-f50adguard.json /usr/share/rpcd/acl.d/luci-app-f50adguard.json
 f50-wifi-nondfs /usr/libexec/f50-wifi-nondfs
 f50-wifi-start-safe /usr/libexec/f50-wifi-start-safe
 FILES
+chmod 755 /usr/libexec/unisoc-modem/lock /usr/libexec/rpcd/mu300dash
 chmod 755 /usr/libexec/f50-wifi-nondfs /usr/libexec/f50-wifi-start-safe
 sh apply-reliability.sh
 chmod 755 /usr/libexec/unisoc-modem/dashboard-info /usr/libexec/rpcd/f50quota /usr/libexec/rpcd/f50channel /usr/libexec/rpcd/f50openclash /usr/libexec/f50openclash-worker
@@ -139,6 +146,7 @@ uci commit luci
 /etc/init.d/rpcd restart
 /etc/init.d/f50history enable
 /etc/init.d/f50history start
+sync
 printf '安装完成；请重新登录并强制刷新首页。\n原页面和配置备份：%s\n恢复命令：sh %s/restore.sh\n' "$backup" "$backup"
 ubus call f50power status >/dev/null
 ubus call f50quota status >/dev/null

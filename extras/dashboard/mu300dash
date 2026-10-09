@@ -1,0 +1,608 @@
+#!/bin/sh
+# mu300dash -- the compatibility RPC object of luci-app-mu300.
+#
+# Called by LuCI as:  ubus call mu300dash <method> '{...}'
+#   rpcd runs this script as:  mu300dash call <method>   with the params JSON on stdin,
+#   and `mu300dash list` must print the method declaration blob.
+# The reply is one JSON line on stdout.
+#
+# Methods:
+#   status [refresh]  system snapshot (mu300-dash-info, fast, no AT) + the cellular
+#                     cache (mu300-dash-cell) with its age. A stale cache triggers a
+#                     background refresh (setsid) - the call itself NEVER waits for AT:
+#                     LuCI's /admin/ubus endpoint kills a call after 30 s, and an AT
+#                     round inside a page request starves the dial watchdog (V50 lesson).
+#   act op [arg]      mu300-dash-act; slow ops run detached via setsid and return
+#                     immediately ("started":1), fast ones run inline.
+#   at cmd            one raw AT command through mu300-at, with the same guards the
+#                     V50 panel used: must start with AT, no ";" command chaining, and
+#                     AT+SPENGMD=0,1,... is hard-denied in any spelling (it switches the port into
+#                     streaming mode and kills the AT channel until a reboot).
+#                     Reply includes the raw modem output; last 40 commands are kept
+#                     in the package runtime directory.
+#   at_history        that history, raw text.
+#   lang_get, lang_set  LuCI's languages and the lang extra (unisoc-modem/languages, mu300-extra)
+#
+# The AT terminal's whole wait is capped below the 30 s endpoint limit (AT_LOCK_WAIT
+# for the channel lock plus AT_BUDGET for the answer, mu300-at's MU300_AT_BUDGET),
+# so a busy or slow channel answers "busy" instead of the call being killed; the
+# frontend simply retries those.
+
+export PATH="$PATH:/opt/mu300/bin:/opt/mu300/busybox-bin:/usr/libexec/unisoc-modem:/usr/sbin:/sbin"
+
+# the shared JSON escaper and uci allow-lists (/usr/share/unisoc-modem/lib.sh)
+LIB=${0%/*}/../../share/unisoc-modem/lib.sh
+[ -f "$LIB" ] || LIB=/usr/share/unisoc-modem/lib.sh
+. "$LIB"
+
+DASH=${MU300_DASH_BIN:-/usr/libexec/unisoc-modem}
+# The SMS pool mu300-sms keeps (and mu300-smsd fills), handed to it in the
+# environment: /etc/mu300/sms-pool (D11), or the sms_pool the UI wrote, which
+# must be under /etc/unisoc-modem or /etc/mu300 - and is never /etc/mu300/sms,
+# the sms command's own state. The command is a known mu300-sms or a program in
+# the platform directory.
+SMS_POOL=$(safe_state_dir "$(uci_get sms_pool)" '')
+case $SMS_POOL in /etc/mu300/sms|/etc/mu300/sms/*) SMS_POOL= ;; esac
+export MU300_SMS_POOL=${MU300_SMS_POOL:-${SMS_POOL:-/etc/mu300/sms-pool}}
+SMS=${MU300_SMS_BIN:-$(safe_program "$(uci_get sms_command)" /opt/mu300/bin/mu300-sms /usr/bin/mu300-sms)}
+[ -n "$SMS" ] || SMS=$(command -v mu300-sms 2>/dev/null || true)
+AT=${MU300_AT:-/usr/libexec/unisoc-modem/at}
+# the runtime directory holds the AT history and the method log (SMS text
+# included): root only. A directory someone else made is refused (lib.sh):
+# every call then answers one fixed error and runs nothing.
+DIR=${MU300_DASH_DIR:-$RUN_DIR}
+DIR_OK=1
+private_dir "$DIR" || DIR_OK=0
+CELL=$DIR/cell.json
+SIGF=$DIR/sig.json
+COLLECT_LCK=$DIR/collect.lck
+FAST_LCK=$DIR/fast.lck
+HIST=$DIR/at-history
+TTL=${MU300_DASH_TTL:-5}          # full tier: neighbours/QoS/operator
+TTL_FAST=${MU300_DASH_TTL_FAST:-1} # serving tier: kick whenever older than 1 s (a fast round is ~300 ms)
+MU300_AT_LOCK_WAIT=12
+export MU300_AT_LOCK_WAIT
+# the AT terminal's own limits: 5 s for the lock, 20 s for the answer (a command
+# of 8 s after the daemon's usual 1-3 s drain fits); 25 s in all, under rpcd's 30
+AT_LOCK_WAIT=5
+AT_BUDGET=20
+
+# ------------------------------------------------------------- input, JSON
+# This script runs as root on what a browser sent. Every parameter is checked
+# against an allow-list (an exact, anchored pattern or a fixed set) before it is
+# used; a refusal answers a fixed English error and runs nothing. Values reach a
+# command only as one quoted argument that cannot start with "-", or on stdin.
+# Every reply is built with json_str (strings) or json_obj (an adapter's JSON
+# object, re-serialised by jsonfilter); nothing untrusted is printf'd into JSON.
+
+NL='
+'
+INPUT_MAX=16384
+INPUT=   # the request, read by "call" only (rpcd gives "list" no stdin)
+input_too_large() { [ $(($(printf '%s' "$INPUT" | wc -c))) -gt "$INPUT_MAX" ]; }
+
+# inp JSONPATH: the parameter, exactly as sent, in $V. A NUL becomes \001 (which
+# every check refuses), trailing newlines are kept (the "x" sentinel; jsonfilter
+# adds one newline of its own), a JSON null is empty.
+inp() {
+    V=$(printf '%s' "$INPUT" | jsonfilter -e "$1" 2>/dev/null | tr '\000' '\001'; printf x)
+    V=${V%x}; V=${V%"$NL"}
+    case $V in null) V= ;; esac
+}
+
+# is_ascii_line VALUE: printable ASCII only (no control character, no newline,
+# no byte above 0x7e)
+is_ascii_line() { [ "$(printf '%s' "$1" | LC_ALL=C tr -d ' -~'; echo x)" = x ]; }
+# allowed VALUE ERE: VALUE is one line of printable ASCII matching ^ERE$
+allowed() { is_ascii_line "$1" && printf '%s\n' "$1" | LC_ALL=C grep -Eqx -- "$2"; }
+
+# json_obj TEXT: TEXT as jsonfilter re-serialises it, if it is one JSON object
+# (trailing text dropped, raw control characters escaped); fails otherwise
+json_obj() {
+    _o=$(printf '%s' "$1" | jsonfilter -e '@' 2>/dev/null) || return 1
+    case $_o in '{'*'}') printf '%s\n' "$_o" ;; *) return 1 ;; esac
+}
+# json_file FILE: the JSON object in FILE, or null
+json_file() { { [ -s "$1" ] && json_obj "$(cat "$1")"; } || echo null; }
+# refuse MESSAGE [DETAIL]: the fixed error reply
+refuse() {
+    if [ -n "${2:-}" ]; then
+        printf '{"ok":0,"error":%s,"detail":%s}\n' "$(json_str "$1")" "$(json_str "$2")"
+    else
+        printf '{"ok":0,"error":%s}\n' "$(json_str "$1")"
+    fi
+}
+# reply_obj TEXT MESSAGE: an adapter's JSON object, or the fixed error
+reply_obj() { json_obj "$1" || refuse "$2"; }
+
+now() { date +%s; }
+# at_client_busy TEXT: a line of TEXT is the AT client's own "gave up on the lock" (mu300-at, or the plugin's at
+# adapter), not a modem reply that happens to say busy ("+CME ERROR: SIM busy")
+at_client_busy() { printf '%s\n' "$1" | grep -qxE '(mu300|unisoc)-at: busy'; }
+collecting() {
+    _p=$(cat "$COLLECT_LCK/pid" 2>/dev/null)
+    [ -n "$_p" ] && [ -d "/proc/$_p" ] &&
+        { tr '\0' ' ' < "/proc/$_p/cmdline"; } 2>/dev/null | grep -q '/unisoc-modem/cell'
+}
+fast_busy() {
+    _p=$(cat "$FAST_LCK/pid" 2>/dev/null)
+    [ -n "$_p" ] && [ -d "/proc/$_p" ] &&
+        { tr '\0' ' ' < "/proc/$_p/cmdline"; } 2>/dev/null | grep -q '/unisoc-modem/cell'
+}
+age_of() { [ -s "$1" ] && echo $(( $(now) - $(date -r "$1" +%s 2>/dev/null || echo 0) )) || echo -1; }
+
+m_status() {
+    local info cage sage busy=0 fbusy=0
+    info=$(json_obj "$("$DASH/dashboard-info" 2>/dev/null)") || info='{"error":"Dashboard info failed"}'
+    cage=$(age_of "$CELL"); sage=$(age_of "$SIGF")
+    # two refresh tiers, both detached: the fast one keeps the serving-cell data
+    # within ~3 s of reality, the full one refreshes neighbours/QoS/operator.
+    # a full round in flight also writes the fast cache, so it counts for both.
+    # During a lock apply (SFUN restart) do not kick anything: the modem answers
+    # garbage mid-restart and the collectors would only burn the AT channel.
+    if [ -d /run/unisoc-modem-lock-apply ]; then busy=1; fbusy=1; fi
+    if collecting; then busy=1; fbusy=1; fi
+    fast_busy && fbusy=1
+    # A full round also refreshes sig.json. Prefer it when both tiers are stale;
+    # starting full and fast together doubles the AT burst for no benefit.
+    if { [ "$cage" -lt 0 ] || [ "$cage" -gt "$TTL" ]; } && [ "$busy" = 0 ]; then
+        setsid "$DASH/cell" >/dev/null 2>&1 &
+        busy=1; fbusy=1
+    elif { [ "$sage" -lt 0 ] || [ "$sage" -gt "$TTL_FAST" ]; } && [ "$fbusy" = 0 ]; then
+        setsid "$DASH/cell" fast >/dev/null 2>&1 &
+        fbusy=1
+    fi
+    printf '{"info":%s,"cell":%s,"sig":%s,"cell_age":%d,"sig_age":%d,"refreshing":%d}\n' \
+        "$info" "$(json_file "$CELL")" "$(json_file "$SIGF")" "$cage" "$sage" "$busy"
+}
+
+# Live serving-cell snapshot for views where stale radio readings are actively
+# misleading (notably the lock page hero). This intentionally uses an isolated
+# temporary directory and returns the just-completed AT round, never cell.json
+# or sig.json from an earlier request. The bounded nr6/nr7 pool keeps it off
+# nr1 while limiting the number of concurrent modem collectors.
+m_signal() {
+    # During a lock apply the protocol stack is restarting: live AT reads in
+    # that window return garbage or wedge, and rpcd died with a userspace
+    # segfault (sessions wiped -> LuCI login loop) on at least one live
+    # read's output. Serve the last snapshot until the apply finishes.
+    if [ -d /run/unisoc-modem-lock-apply ]; then
+        json_obj "$(cat "$SIGF" 2>/dev/null)" ||
+            printf '{"error":"Applying network locks: no live signal right now"}\n'
+        return
+    fi
+    local live="$DIR/live.$$"
+    mkdir -p "$live" 2>/dev/null
+    # The output is deliberately uncached, but the modem channel is not
+    # unbounded parallel work. The collector claims one of the verified
+    # slot-0 nr6/nr7 channels and drops excess overlap immediately.
+    MU300_DASH_DIR="$live" MU300_DASH_LOCK_DIR="$DIR" \
+        "$DASH/cell" fast >/dev/null 2>&1
+    json_obj "$(cat "$live/sig.json" 2>/dev/null)" ||
+        printf '{"error":"Live signal read failed"}\n'
+    rm -rf "$live"
+}
+
+m_act() {
+    local op arg out
+    inp '@.op'; op=$V
+    inp '@.arg'; arg=$V
+    # the ops and arguments mu300-dash-act (unisoc-modem/action) knows
+    case $op in
+        radio|wifi)         allowed "$arg" '(on|off)' ;;
+        data)               allowed "$arg" '(up|down)' ;;
+        vpn)                allowed "$arg" '(start|stop)' ;;
+        os)                 allowed "$arg" 'android' ;;
+        modem-reset|reboot) [ -z "$arg" ] ;;
+        *)                  refuse 'Unknown op'; return ;;
+    esac || { refuse 'Invalid argument for this op'; return; }
+    # the radio ops take mobile-data's radio lock (unisoc-modem/action): while the dial, the watchdog or another
+    # radio op holds it, say so now - once detached, a refusal would never reach the page
+    case $op in radio|modem-reset)
+        if radio_busy; then
+            printf '{"ok":0,"busy":1,"error":"The radio is busy: the dial or the watchdog is switching it, try again shortly"}\n'
+            return
+        fi ;;
+    esac
+    case $op in
+        # the SFUN dance can run half a minute: never inside the request
+        radio|modem-reset|reboot|vpn)
+            setsid "$DASH/action" "$op" "$arg" >/dev/null 2>&1 &
+            printf '{"ok":1,"started":1,"op":%s}\n' "$(json_str "$op${arg:+ $arg}")"
+            ;;
+        # os runs inline: arming takes milliseconds and a failure (misc write
+        # rejected, tool missing) must reach the page instead of a silent no-op
+        data|wifi|os)
+            out=$("$DASH/action" "$op" "$arg" 2>/dev/null)
+            reply_obj "$out" 'The action gave no valid reply'
+            ;;
+    esac
+}
+
+AT_MAX=512
+# at_wedges CMD: CMD writes AT+SPENGMD with the parameters 0,1 first - the
+# streaming-mode family. Spaces and quotes are dropped and case is ignored;
+# each parameter is compared by its number (00 = 0, "1" = 1).
+at_wedges() {
+    printf '%s\n' "$1" | tr -d ' "' | tr 'a-z' 'A-Z' | awk '{
+        s = $0
+        while ((i = index(s, "+SPENGMD=")) > 0) {
+            s = substr(s, i + 9); split(s, p, ",")
+            if (p[1] ~ /^0+$/ && p[2] ~ /^0*1([^0-9]|$)/) found = 1
+        }
+    } END { exit !found }'
+}
+m_at() {
+    local cmd reply
+    inp '@.cmd'; cmd=$V
+    # one line of printable ASCII (a CR or LF would send a second command)
+    if ! is_ascii_line "$cmd" || [ ${#cmd} -gt "$AT_MAX" ]; then
+        refuse 'An AT command is one line of printable ASCII, at most 512 characters'
+        return
+    fi
+    allowed "$cmd" '[Aa][Tt].*' || { refuse 'Must be an AT command'; return; }
+    case "$cmd" in *';'*)
+        refuse 'No ";" command chaining'
+        return
+        ;;
+    esac
+    # AT+SPENGMD=0,1,0 switches the port into streaming mode and kills the AT
+    # channel until a reboot: denied in any spelling (case, spaces, quotes,
+    # leading zeros, more parameters, after another command on the same line)
+    if at_wedges "$cmd"; then
+        refuse 'Denied: this command wedges the AT port until a reboot'
+        return
+    fi
+    # a lock apply in flight means the modem is restarting (SFUN) - say so instead
+    # of a generic busy, so it does not look like the console died
+    if [ -d /run/unisoc-modem-lock-apply ]; then
+        printf '{"ok":0,"busy":1,"error":"Applying network locks: the modem is restarting (about half a minute), try again shortly"}\n'
+        return
+    fi
+    # mu300-at itself gives up waiting for the lock and says so; turn that into a
+    # retryable "busy" instead of letting the page show a dead console
+    reply=$(MU300_AT_LOCK_WAIT=$AT_LOCK_WAIT MU300_AT_BUDGET=$AT_BUDGET "$AT" -t 8 "$cmd" 2>&1)
+    if at_client_busy "$reply"; then
+        printf '{"ok":0,"busy":1,"error":"The AT channel is busy; the command was not sent, try again"}\n'
+        return
+    fi
+    case "$reply" in
+        # the answer budget ran out: the command was sent, the daemon may still run it
+        *"no answer from the daemon"*)
+            printf '{"ok":0,"busy":1,"error":"The modem did not answer in time; the command may still run, check before sending it again"}\n'
+            return
+            ;;
+    esac
+    printf '%s %s\n' "$(date '+%m-%d %H:%M:%S')" "$cmd" >> "$HIST"
+    tail -n 40 "$HIST" > "$HIST.t" 2>/dev/null && mv "$HIST.t" "$HIST"
+    printf '{"ok":1,"cmd":%s,"reply":%s}\n' "$(json_str "$cmd")" "$(json_str "$reply")"
+}
+
+m_at_history() {
+    printf '{"history":%s}\n' "$(json_str "$(cat "$HIST" 2>/dev/null)")"
+}
+
+m_lock_get() {
+    local fresh out
+    inp '@.fresh'; fresh=$V
+    allowed "$fresh" '(0|1)?' || { refuse 'The fresh parameter must be 0 or 1'; return; }
+    # default serves the lock cache instantly (a real read is seven AT
+    # round trips, about a second each); fresh=1 does the real read -
+    # the page uses it only behind the manual refresh button
+    if [ "$fresh" = 1 ]; then
+        out=$("$DASH/lock" get fresh 2>/dev/null)
+    else
+        out=$("$DASH/lock" get 2>/dev/null)
+    fi
+    if json_obj "$out" >/dev/null; then
+        local applying=0 reg=0 act=0 cell_ts=0 data_up=0
+        [ -d /run/unisoc-modem-lock-apply ] && applying=1
+        reg=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.reg.stat' 2>/dev/null)
+        act=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.reg.act' 2>/dev/null)
+        cell_ts=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.ts' 2>/dev/null)
+        ip -4 addr show sipa_eth0 2>/dev/null | grep -q 'inet ' && data_up=1
+        case "$reg" in ''|*[!0-9]*) reg=0;; esac
+        case "$act" in ''|*[!0-9]*) act=0;; esac
+        case "$cell_ts" in ''|*[!0-9]*) cell_ts=0;; esac
+        printf '%s\n' "$out" | sed "s/^{/{\"applying\":$applying,\"registration\":$reg,\"access\":$act,\"cell_ts\":$cell_ts,\"data_up\":$data_up,/"
+    else
+        printf '{"error":"Lock read failed"}\n'
+    fi
+}
+
+# the values unisoc-modem/lock apply takes, per kind: bands are up to 32
+# numbers of up to 3 digits (empty = automatic); a cell is one RAT:ARFCN,PCI
+# (NR-ARFCN up to 3279165, EARFCN up to 262143, PCI up to 1007)
+lock_val_ok() {  # lock_val_ok KIND VALUE
+    case $1 in
+        mode)            allowed "$2" '(auto|4g|sa|nsa)' ;;
+        endc|auto_apply) allowed "$2" '(on|off)' ;;
+        lte|nr)          [ -z "$2" ] || allowed "$2" '[0-9]{1,3}(,[0-9]{1,3}){0,31}' ;;
+        cell)            allowed "$2" '(auto|off|off-nr|off-lte|(nr|lte):[0-9]{1,7},[0-9]{1,4})' ;;
+        *)               return 1 ;;
+    esac
+}
+
+m_lock_set() {
+    local kind val q=0
+    inp '@.kind'; kind=$V
+    inp '@.val'; val=$V
+    case "$kind" in
+        mode|endc|lte|nr|cell|auto_apply) ;;
+        *) refuse 'Unknown lock kind'; return ;;
+    esac
+    lock_val_ok "$kind" "$val" || { refuse 'Invalid value for this lock kind'; return; }
+    # applying restarts the protocol stack (SFUN 5 -> 4): half a minute without
+    # cellular - exactly the thing that must never run inside a request
+    # queued=1 tells the page another apply is still running (SFUN restart);
+    # the new one waits for the modem and the page can say so
+    [ -d /run/unisoc-modem-lock-apply ] && q=1
+    setsid "$DASH/lock" apply "$kind" "$val" >/dev/null 2>&1 &
+    printf '{"ok":1,"started":1,"queued":%d,"op":%s}\n' "$q" "$(json_str "lock $kind=$val")"
+}
+
+# --------------------------------------------------------------------- SMS
+# Everything below talks to the LOCAL pool via mu300-sms (the sms daemon keeps
+# it in step with the SIM). list/show are file reads; send goes through AT
+# (UCS-2 PDU submit, seconds); sync runs detached because CMGL walks the SIM.
+
+SMS_ID='[0-9]{1,6}'
+m_sms_list() {
+    local page out
+    inp '@.page'; page=${V:-1}
+    allowed "$page" "$SMS_ID" || { refuse 'Invalid page'; return; }
+    out=$("$SMS" list "$page" 2>/dev/null) || out=''
+    [ -n "$out" ] || { printf '{"error":"mu300-sms is not available (the SMS service is not installed or not running)"}\n'; return; }
+    # first line "pool: N message(s), U unread - page P/T (10 per page)",
+    # then fixed-width rows (see mu300-sms cmd_list); parse by column position
+    printf '%s\n' "$out" | awk "$JSON_ESC"'
+        NR == 1 {
+            total = $0; sub(/^pool: /, "", total); sub(/ message.*/, "", total)
+            unread = $0; sub(/^pool: [0-9]+ message\(s\), /, "", unread); sub(/ unread.*/, "", unread)
+            pg = $0; sub(/.*page /, "", pg); sub(/\/.*/, "", pg)
+            pgs = $0; sub(/.*page [0-9]+\//, "", pgs); sub(/ \(.*/, "", pgs)
+            printf "{\"total\":%s,\"unread\":%s,\"page\":%s,\"pages\":%s,\"msgs\":[",
+                (total ~ /^[0-9]+$/ ? total : 0), (unread ~ /^[0-9]+$/ ? unread : 0),
+                (pg ~ /^[0-9]+$/ ? pg : 1), (pgs ~ /^[0-9]+$/ ? pgs : 1)
+            next
+        }
+        {
+            id = substr($0, 1, 7); st = substr($0, 9, 7); dir = substr($0, 17, 3)
+            peer = substr($0, 21, 18); tm = substr($0, 40, 21); prev = substr($0, 62)
+            gsub(/^[ \t]+|[ \t]+$/, "", id); gsub(/^[ \t]+|[ \t]+$/, "", st)
+            gsub(/^[ \t]+|[ \t]+$/, "", dir); gsub(/^[ \t]+|[ \t]+$/, "", peer)
+            gsub(/^[ \t]+|[ \t]+$/, "", tm); gsub(/^[ \t]+|[ \t]+$/, "", prev)
+            if (id ~ /^[0-9]+$/)
+                printf "%s{\"id\":\"%s\",\"status\":\"%s\",\"dir\":\"%s\",\"peer\":\"%s\",\"time\":\"%s\",\"preview\":\"%s\"}",
+                    (n++ ? "," : ""), id, jesc(st), jesc(dir), jesc(peer), jesc(tm), jesc(prev)
+        }
+        END { if (NR) print "]}"; else print "{\"error\":\"No output\"}" }'
+}
+
+m_sms_show() {
+    local id text
+    inp '@.id'; id=$V
+    allowed "$id" "$SMS_ID" || { refuse 'Bad ID'; return; }
+    if text=$("$SMS" show "$id" 2>/dev/null) && [ -n "$text" ]; then
+        printf '{"ok":1,"text":%s}\n' "$(json_str "$text")"
+    else
+        refuse 'Read failed' "$text"
+    fi
+}
+
+SMS_MAX=480
+# sms_text_ok TEXT: no control character but newline and tab
+sms_text_ok() {
+    [ "$(printf '%s' "$1" | LC_ALL=C tr -d '\011\012\040-\176\200-\377'; echo x)" = x ]
+}
+# sms_chars TEXT: its length in characters (UTF-8 continuation bytes not counted)
+sms_chars() { echo $(($(printf '%s' "$1" | LC_ALL=C tr -d '\200-\277' | wc -c))); }
+
+m_sms_send() {
+    local num text out
+    inp '@.num'; num=$V
+    inp '@.text'; text=$V
+    allowed "$num" '\+?[0-9]{1,20}' || { refuse 'The number may only contain digits (and a leading +)'; return; }
+    [ -n "$text" ] || { refuse 'The message is empty'; return; }
+    [ "$(sms_chars "$text")" -le "$SMS_MAX" ] || { refuse 'The message is too long (over 480 characters)'; return; }
+    sms_text_ok "$text" || { refuse 'The message contains a control character'; return; }
+    # the text travels on stdin (adapter contract: send --stdin NUMBER), never
+    # as an argument where it could read as an option
+    out=$(printf '%s' "$text" | "$SMS" send --stdin "$num" 2>&1)
+    # success is the adapter's last line saying so ("sent ..." from mu300-sms, or a bare OK), not those words
+    # anywhere in a refusal
+    if at_client_busy "$out"; then
+        printf '{"ok":0,"busy":1,"error":"The AT channel is busy; the command was not sent, try again"}\n'
+        return
+    fi
+    case $(printf '%s\n' "$out" | tail -n 1) in
+        sent|'sent '*|OK) printf '{"ok":1,"reply":%s}\n' "$(json_str "$out")" ;;
+        *) refuse 'Sending failed' "$(printf '%s\n' "$out" | tail -n1)" ;;
+    esac
+}
+
+m_sms_delete() {
+    local id sim out
+    inp '@.id'; id=$V
+    inp '@.sim'; sim=$V
+    allowed "$id" "(all|$SMS_ID)" || { refuse 'Bad ID'; return; }
+    # sim=1 (the page sends true) also removes the message from the SIM storage
+    case $sim in
+        ''|0|false) sim=0 ;;
+        1|true)     sim=1 ;;
+        *)          refuse 'The sim parameter must be 0 or 1'; return ;;
+    esac
+    if [ "$sim" = 1 ]; then
+        out=$("$SMS" delete "$id" --sim 2>&1)
+    else
+        out=$("$SMS" delete "$id" 2>&1)
+    fi || { refuse 'Delete failed' "$(printf '%s\n' "$out" | tail -n1)"; return; }
+    printf '{"ok":1}\n'
+}
+
+m_sms_sync() {
+    setsid "$SMS" sync >/dev/null 2>&1 &
+    printf '{"ok":1,"started":1}\n'
+}
+
+m_sysinfo() {
+    # A purely local snapshot: no AT, no cache, no kick - the first screen draws this first
+    json_obj "$("$DASH/dashboard-info" 2>/dev/null)" || printf '{"error":"Dashboard info failed"}\n'
+}
+
+# ---------------------------------------------------------------------- USB
+m_usb_get() { reply_obj "$("$DASH/device-usb" get 2>/dev/null)" 'The USB adapter (device-usb) gave no valid reply'; }
+m_usb_net_list() { reply_obj "$("$DASH/device-usb" net-list 2>/dev/null)" 'The USB adapter (device-usb) gave no valid reply'; }
+
+m_usb_set() {
+    local kind value scope auto out
+    inp '@.kind'; kind=$V
+    inp '@.value'; value=$V
+    inp '@.scope'; scope=$V
+    inp '@.auto'; auto=$V
+    allowed "$auto" '(0|1)' || { refuse 'The auto parameter must be 0 or 1'; return; }
+    case $kind in
+        role)
+            allowed "$value" '(host|device)' || { refuse 'Invalid USB role'; return; }
+            [ -z "$scope" ] || { refuse 'A USB role takes no scope'; return; }
+            out=$("$DASH/device-usb" set-role "$value" "$auto" 2>/dev/null)
+            ;;
+        net)
+            allowed "$value" '(ncm|ecm|rndis)' || { refuse 'Invalid USB network mode'; return; }
+            allowed "$scope" '(once|permanent)' || { refuse 'Invalid USB network scope'; return; }
+            out=$("$DASH/device-usb" set-net "$value" "$scope" "$auto" 2>/dev/null)
+            ;;
+        *)
+            refuse 'Unknown USB setting'; return ;;
+    esac
+    reply_obj "$out" 'The USB adapter (device-usb) gave no valid reply'
+}
+
+# a network interface name: at most 15 characters (IFNAMSIZ), starting with a
+# letter or digit, so it is never an option, ".", ".." or a path
+m_usb_net_add() {
+    local iface
+    inp '@.iface'; iface=$V
+    allowed "$iface" '[A-Za-z0-9][A-Za-z0-9_.:-]{0,14}' || { refuse 'Invalid interface name'; return; }
+    reply_obj "$("$DASH/device-usb" net-add "$iface" 2>/dev/null)" 'The USB adapter (device-usb) gave no valid reply'
+}
+
+# ---------------------------------------------------------------- languages
+# LuCI's languages and the lang extra (the Languages page): the adapter does the work through mu300-extra
+LANGS=${MU300_LANGS_BIN:-$DASH/languages}
+m_lang_get() { reply_obj "$("$LANGS" get 2>/dev/null)" 'The languages adapter gave no valid reply'; }
+
+# op: enable|disable (codes: up to 64 language codes, or all), use (one code, en or auto), install (source: release
+# or file - never a path: the upload goes to the one path the ACL allows), remove
+m_lang_set() {
+    local op codes source c n out
+    inp '@.op'; op=$V
+    inp '@.codes'; codes=$V
+    inp '@.source'; source=$V
+    allowed "$op" '(enable|disable|use|install|remove)' || { refuse 'Unknown language operation'; return; }
+    case $op in
+        enable|disable|use)
+            allowed "$codes" '(all|en|auto|[a-z]{2,3}(_[a-z]{2})?( [a-z]{2,3}(_[a-z]{2})?){0,63})' ||
+                { refuse 'Invalid language code'; return; }
+            n=0; for c in $codes; do n=$((n + 1)); done
+            case $op:$codes in
+                use:all|enable:en|enable:auto|disable:en|disable:auto) refuse 'Invalid language code'; return ;;
+            esac
+            [ "$op" != use ] || [ "$n" = 1 ] || { refuse 'Invalid language code'; return; }
+            # all, en and auto go alone
+            case " $codes " in *" all "*|*" en "*|*" auto "*) [ "$n" = 1 ] || { refuse 'Invalid language code'; return; } ;; esac
+            [ -z "$source" ] || { refuse 'Invalid language request'; return; }
+            # shellcheck disable=SC2086 -- checked above: words of [a-z_] only
+            out=$("$LANGS" "$op" $codes 2>/dev/null) ;;
+        install)
+            allowed "$source" '(release|file)' || { refuse 'Unknown source'; return; }
+            [ -z "$codes" ] || { refuse 'Invalid language request'; return; }
+            out=$("$LANGS" install "$source" 2>/dev/null) ;;
+        remove)
+            [ -z "$codes$source" ] || { refuse 'Invalid language request'; return; }
+            out=$("$LANGS" remove 2>/dev/null) ;;
+    esac
+    reply_obj "$out" 'The languages adapter gave no valid reply'
+}
+
+do_list() {
+    cat <<EOF
+{
+	"sysinfo": { },
+	"status": { },
+	"signal": { },
+	"act": { "op": "String", "arg": "String" },
+	"at": { "cmd": "String" },
+	"at_history": { },
+	"lock_get": { "fresh": "String" },
+	"lock_set": { "kind": "String", "val": "String" },
+	"sms_list": { "page": "String" },
+	"sms_show": { "id": "String" },
+	"sms_send": { "num": "String", "text": "String" },
+	"sms_delete": { "id": "String", "sim": "String" },
+	"sms_sync": { },
+	"usb_get": { },
+	"usb_set": { "kind": "String", "value": "String", "scope": "String", "auto": "String" },
+	"usb_net_list": { },
+	"usb_net_add": { "iface": "String" },
+	"lang_get": { },
+	"lang_set": { "op": "String", "codes": "String", "source": "String" }
+}
+EOF
+}
+
+# Forensics for the rpcd crash (2026-09-28): rpcd segfaulted while parsing a
+# script reply during a lock apply, wiping every session (LuCI bounced to the
+# login page). Every method's raw stdout is appended here, so the last entry
+# at the moment of a crash is the input that killed the parser.
+LASTLOG=$DIR/last-outputs.log
+run_m() {  # run_m LABEL FUNCTION: the method's reply, logged
+    local out
+    out=$("$2" 2>/dev/null)
+    printf '=== %s %s len=%s\n%s\n' "$(date '+%m-%d %H:%M:%S')" "$1" "${#out}" "$out" >> "$LASTLOG" 2>/dev/null
+    tail -n 400 "$LASTLOG" > "$LASTLOG.t" 2>/dev/null && mv "$LASTLOG.t" "$LASTLOG"
+    printf '%s\n' "$out"
+}
+
+case "${1:-}" in
+list)
+    do_list
+    ;;
+call)
+    INPUT=$(cat 2>/dev/null)
+    if input_too_large; then
+        refuse 'Request too large'
+        exit 0
+    fi
+    if [ "$DIR_OK" != 1 ]; then
+        refuse 'The runtime directory is not safe; nothing was run'
+        exit 0
+    fi
+    case ${2:-} in
+        sysinfo)      run_m sysinfo      m_sysinfo ;;
+        status)       run_m status       m_status ;;
+        signal)       run_m signal       m_signal ;;
+        act)          run_m act          m_act ;;
+        at)           run_m at           m_at ;;
+        at_history)   run_m at_history   m_at_history ;;
+        lock_get)     run_m lock_get     m_lock_get ;;
+        lock_set)     run_m lock_set     m_lock_set ;;
+        sms_list)     run_m sms_list     m_sms_list ;;
+        sms_show)     run_m sms_show     m_sms_show ;;
+        sms_send)     run_m sms_send     m_sms_send ;;
+        sms_delete)   run_m sms_delete   m_sms_delete ;;
+        sms_sync)     run_m sms_sync     m_sms_sync ;;
+        usb_get)      run_m usb_get      m_usb_get ;;
+        usb_set)      run_m usb_set      m_usb_set ;;
+        usb_net_list) run_m usb_net_list m_usb_net_list ;;
+        usb_net_add)  run_m usb_net_add  m_usb_net_add ;;
+        lang_get)     run_m lang_get     m_lang_get ;;
+        lang_set)     run_m lang_set     m_lang_set ;;
+        *)            refuse 'No such method' ;;
+    esac
+    ;;
+*)
+    echo "usage: $0 {list|call <method>}" >&2
+    exit 2
+    ;;
+esac

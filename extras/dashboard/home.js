@@ -7,7 +7,7 @@
 'require f50quota5 as F50Quota';
 'require f50channel as F50Channel';
 'require f50openclash2 as F50OpenClash';
-'require f50powerlittle as F50Power';
+'require f50power20 as F50Power';
 
 /* MU300 status dashboard -- the LuCI landing page (menu.d hangs it at admin/home).
  *
