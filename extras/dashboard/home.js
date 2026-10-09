@@ -155,8 +155,8 @@ return view.extend({
   <h3>流量</h3>
   <div class="f50-combined-chart" style="width:100%">
     <div class="f50-rate-head">
-      <div class="f50-rate-download"><b id="mud-dl">--</b><span>下载</span></div>
-      <div class="f50-rate-upload"><b id="mud-ul">--</b><span>上传</span></div>
+      <div class="f50-rate-download"><span>下载</span><b id="mud-dl">--</b></div>
+      <div class="f50-rate-upload"><span>上传</span><b id="mud-ul">--</b></div>
     </div>
     <div id="mud-rate-chart" style="width:100%;margin:6px 0;touch-action:pan-y"></div>
     <div id="mud-rate-detail" style="display:none;font-size:.75em;margin:4px 0"></div>
@@ -283,16 +283,18 @@ return view.extend({
 
  organize: function(root) {
   root.classList.add('f50-home');
+  requestAnimationFrame(function(){var title=root.querySelector('.mud-sec h3');if(title){var style=getComputedStyle(title);root.style.setProperty('--f50-rate-label-size',style.fontSize);root.style.setProperty('--f50-rate-label-weight',style.fontWeight);}});
   root.prepend(E('style', {}, `
    .f50-home{--f50-dl:#249ad1;--f50-ul:#159b85}
    .f50-home .f50-rate-head{display:flex;flex-direction:column;gap:3px;margin:5px 0 7px}
    .f50-home .f50-rate-head>div{display:flex;align-items:baseline;gap:9px;min-width:0}
    .f50-home .f50-rate-head b{font-variant-numeric:tabular-nums;line-height:1.2}
    .f50-home .f50-rate-download{color:var(--f50-dl)}
-   .f50-home .f50-rate-download b{font-size:1.7rem;font-weight:750}
+   .f50-home .f50-rate-download{font-size:1.7rem;font-weight:750}
    .f50-home .f50-rate-upload{color:var(--f50-ul)}
-   .f50-home .f50-rate-upload b{font-size:1.4rem;font-weight:650}
-   .f50-home .f50-rate-head span{font-size:.72rem;white-space:nowrap;color:var(--text-muted,#777)}
+   .f50-home .f50-rate-upload{font-size:1.4rem;font-weight:650}
+   .f50-home .f50-rate-head span,.f50-home .f50-rate-head b{font-size:inherit;font-weight:inherit;white-space:nowrap;color:inherit}
+   .f50-home .f50-rate-head span{font-size:var(--f50-rate-label-size,1rem);font-weight:var(--f50-rate-label-weight,600)}
    html[data-darkmode=true] .f50-home{--f50-dl:#249ad1;--f50-ul:#159b85}
    .f50-home .f50-core-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:6px 0 8px}
    .f50-home .f50-core{padding:7px 9px;border-radius:var(--radius-base,.5rem);background:var(--surface-sunken,rgba(127,127,127,.06));font-size:.72rem}
@@ -470,6 +472,10 @@ return view.extend({
    .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#fff!important;border-color:#008cba!important;color:#008cba!important}
    .f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls>.mud-btn[aria-expanded=true],.f50-home #f50-other-controls .mud-lockbtn.locked{background:#008cba!important;border-color:#008cba!important;color:#fff!important}
    .f50-home #mud-btn-other{font-weight:650!important;position:relative;box-shadow:none!important}
+   .f50-home .f50-primary-controls>.mud-btn{font-size:1rem!important;font-weight:600!important}
+   .f50-home #f50-other-controls>.mud-btn{font-size:clamp(.875rem,2.6vw,1rem)!important;font-weight:600!important}
+   .f50-home #mud-btn-other{font-size:1rem!important}
+   .f50-home #f50-other-controls #mud-btn-highspeed.f50-highrail-switching{font-size:.75rem!important}
    .f50-home #mud-btn-other:after,.f50-home #f50-other-controls:before,.f50-home #f50-other-controls:after{display:none!important;content:none!important}
    .f50-home #f50-other-controls{padding:0;border:0;border-radius:0;margin-top:14px;background:transparent;overflow:visible}
    .f50-home .f50-controls-section{position:relative;isolation:isolate}
