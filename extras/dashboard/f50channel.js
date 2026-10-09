@@ -13,7 +13,7 @@ return baseclass.extend({mount:function(root){
   mode.value=s.channel==='auto'?'auto':'manual';
   var channels=E('select',{id:'f50-channel-value',style:'width:100%'});
   var list=JSON.parse(s.frequencies || '{}').results || [];
-  list.filter(function(c){return !c.restricted && c.band===(s.band==='5g'?5:2) && !(s.band==='5g' && s.htmode==='VHT80' && [36,40,44,48,52,56,60,64,149,153,157,161].indexOf(c.channel)<0);}).forEach(function(c){channels.appendChild(E('option',{value:String(c.channel)},String(c.channel)));});
+  list.filter(function(c){return [52,56,60,64,100,104,108,112,116,120,124,128,132,136,140,144].indexOf(c.channel)<0 && !c.restricted && c.band===(s.band==='5g'?5:2) && !(s.band==='5g' && s.htmode==='VHT80' && [36,40,44,48,52,56,60,64,149,153,157,161].indexOf(c.channel)<0);}).forEach(function(c){channels.appendChild(E('option',{value:String(c.channel)},String(c.channel)));});
   channels.value=s.channel==='auto'?'36':s.channel;
   channels.disabled=mode.value==='auto';mode.onchange=function(){channels.disabled=mode.value==='auto';};
   var save=E('button',{class:'cbi-button cbi-button-apply',click:function(){save.disabled=true;set(mode.value==='auto'?'auto':channels.value).then(function(r){if(!r.ok)throw new Error(r.error);ui.hideModal();return refresh();}).catch(function(e){ui.addNotification(null,E('p',{},e.message));}).finally(function(){save.disabled=false;});}},'保存');

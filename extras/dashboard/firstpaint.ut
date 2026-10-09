@@ -1,0 +1,7 @@
+{% if (!blank_page && page == 'admin-home'): %}
+{% const seed_status = readfile('/tmp/f50-dashboard-live/status.json') || '{}';
+   const seed_previous = readfile('/tmp/f50-dashboard-live/previous.json') || '{}';
+   const seed_history = readfile('/tmp/f50-dashboard-live/history.json') || '[]';
+   const seed_data = '{"snapshot":' + seed_status + ',"previous":' + seed_previous + ',"history":' + seed_history + '}'; %}
+<script type="application/json" id="f50-dashboard-seed">{{ replace(seed_data, '<', '\\u003c') }}</script>
+{% endif %}

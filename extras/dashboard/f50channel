@@ -15,6 +15,11 @@ call)
   if [ "$target" != auto ]; then
    printf '%s' "$target" | grep -Eq '^[0-9]{1,3}$' || { fail '无效信道'; exit; }
    band=$(uci -q get wireless.radio0.band); mode=$(uci -q get wireless.radio0.htmode)
+   if [ "$band" = 5g ]; then
+    case "$target" in 52|56|60|64|100|104|108|112|116|120|124|128|132|136|140|144)
+     fail '此设备 DFS 启动失败，请选择非 DFS 信道或自动模式'; exit;;
+    esac
+   fi
    case "$band" in 5g) wanted_band=5;; 2g) wanted_band=2;; *) fail '不支持的无线频段'; exit;; esac
    json_load "$(frequencies)" || { fail '无法读取支持的信道'; exit; }; json_select results; json_get_keys keys; found=0
    for k in $keys; do
@@ -27,8 +32,15 @@ call)
     case "$target" in 36|40|44|48|52|56|60|64|149|153|157|161) :;; *) fail '此信道不支持当前 80 MHz 带宽'; exit;; esac
    fi
   fi
+  if [ "$(uci -q get wireless.radio0.band)" = 5g ]; then
+   safe=$(/usr/libexec/f50-wifi-nondfs) || { fail '当前地区没有可用的非 DFS 信道'; exit; }
+   if [ "$target" != auto ] && ! echo " $safe " | grep -q " $target "; then
+    fail '此信道不属于当前地区可用的非 DFS 信道组'; exit
+   fi
+   uci set wireless.radio0.chanlist="$safe"
+  fi
   old=$(uci -q get wireless.radio0.channel)
-  [ "$old" = "$target" ] && { json_init; json_add_boolean ok 1; json_add_boolean changed 0; json_dump; exit; }
+  [ "$old" = "$target" ] && { uci commit wireless; json_init; json_add_boolean ok 1; json_add_boolean changed 0; json_dump; exit; }
   uci set wireless.radio0.channel="$target" && uci commit wireless || { uci revert wireless; fail '保存失败'; exit; }
   setsid /bin/sh -c 'sleep 1; wifi reload' </dev/null >/tmp/f50-channel-reload.log 2>&1 &
   json_init; json_add_boolean ok 1; json_add_boolean changed 1; json_dump;;

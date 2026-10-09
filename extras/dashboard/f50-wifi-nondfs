@@ -1,0 +1,21 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+allowed=$(timeout -k 2 5 iw phy phy0 info 2>/dev/null | awk '/MHz \[/{if ($0 !~ /disabled|radar detection|no IR/) {s=$0; sub(/^.*\[/,"",s); sub(/\].*$/,"",s); print s}}')
+safe=''
+for block in '36 40 44 48' '149 153 157 161'; do
+ valid=1
+ for c in $block; do echo "$allowed" | grep -qx "$c" || valid=0; done
+ [ "$valid" = 1 ] && safe="$safe $block"
+done
+safe=$(echo "$safe" | xargs)
+[ -n "$safe" ] || exit 1
+if [ "$1" = apply ] && [ "$(uci -q get wireless.radio0.band)" = 5g ]; then
+ uci set wireless.radio0.chanlist="$safe"
+ current=$(uci -q get wireless.radio0.channel)
+ if [ "$current" != auto ] && ! echo " $safe " | grep -q " $current "; then
+  uci set wireless.radio0.channel=auto
+  logger -t f50-wifi-start "Unsafe channel $current replaced with non-DFS auto"
+ fi
+ uci commit wireless
+fi
+printf '%s\n' "$safe"

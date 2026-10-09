@@ -21,10 +21,11 @@
  * A neighbor row's Lock goes through lock_set cell (SFUN restarts the radio stack, about half a minute without
  * service); the lock state comes from lock_get (read once when the page loads, again after a lock). */
 
-var DEFAULT_POLL_S = 1.5;
+var DEFAULT_POLL_S = 3;
 var RATE_WIN = 200;
-var liveStatus=rpc.declare({object:"f50history",method:"status",expect:{"":{}}});
-function dashboardStatus(){return liveStatus().then(function(r){var s=r.snapshot || {};if(!s.info)return M.callStatus();s.history=r.history || [];s.previousCpu=r.previous && r.previous.info && r.previous.info.cpu;return s;});}
+var liveStatus=rpc.declare({object:"f50history",method:"status",nobatch:true,expect:{"":{}}});
+function dashboardResult(r){var s=r.snapshot || {};s.history=r.history || [];s.previousCpu=r.previous && r.previous.info && r.previous.info.cpu;return s;}
+function dashboardStatus(){return liveStatus().then(dashboardResult);}
 
 function pollSeconds(value) {
 	var seconds = Number(value);
@@ -76,12 +77,15 @@ return view.extend({
 		root.innerHTML = this.html();
 		this.organize(root);
 		this.wire(root);
-		this._channelDispose = F50Channel.mount(root);
-		this._quotaDispose = F50Quota.mount(root);
-		this._openclashDispose = F50OpenClash.mount(root);
-		this._powerDispose = F50Power.mount(root);
-        this._adguardDispose = F50AdGuard.mount(root);
 		var self = this;
+		var seed = document.getElementById('f50-dashboard-seed');
+		if (seed) {
+			try {
+				var initial = dashboardResult(JSON.parse(seed.textContent));
+				requestAnimationFrame(function(){ if(document.documentElement.contains(root)) self.update(initial); });
+			} catch(e) {}
+			seed.remove();
+		}
 		var intervalMs = DEFAULT_POLL_S * 1000;
 		var config = L.resolveDefault(uci.load('unisoc_modem')).then(function() {
 			intervalMs = pollSeconds(uci.get('unisoc_modem', 'main', 'home_refresh_interval')) * 1000;
@@ -89,6 +93,15 @@ return view.extend({
 		/* Read the full status once now; never run the sysinfo and status collections twice at the same time. */
 		var first = L.resolveDefault(dashboardStatus()).then(function(st) {
 			self.update(st || {});
+		});
+		/* Keep control RPCs out of the first status response batch. */
+		first.finally(function(){
+			if(!document.documentElement.contains(root)) return;
+			self._channelDispose = F50Channel.mount(root);
+			self._quotaDispose = F50Quota.mount(root);
+			self._openclashDispose = F50OpenClash.mount(root);
+			self._powerDispose = F50Power.mount(root);
+			self._adguardDispose = F50AdGuard.mount(root);
 		});
 		/* LuCI poll.add() truncates intervals to whole seconds. Use a one-shot
 		 * timer so 1.5 s remains 1.5 s and slow requests never overlap. */

@@ -9,6 +9,9 @@ for cmd in vnstat ubus uci jsonfilter setsid sha256sum curl; do command -v "$cmd
 ip link show sipa_eth0 >/dev/null || { echo '当前蜂窝接口不是 sipa_eth0，请先适配统计接口'; exit 1; }
 [ "$(uci -q get wireless.radio0.band)" = 5g ] && [ "$(uci -q get wireless.ap0.device)" = radio0 ] || { echo '此版本匹配 radio0 / ap0 和 5GHz 无线，请先适配'; exit 1; }
 sha256sum -c SHA256SUMS >/dev/null
+for path in /usr/share/ucode/luci/template/themes/aurora/header.ut /usr/share/ucode/luci/template/header.ut /etc/init.d/mu300-hw; do
+ [ -r "$path" ] || { echo "缺少 $path；此版本首屏优化需要 Aurora UT 主题，请先适配。"; exit 1; }
+done
 backup="/root/f50-dashboard-backups/$(date +%Y%m%d-%H%M%S)-$$"
 mkdir -p "$backup"
 chmod 700 "$backup"
@@ -50,6 +53,13 @@ cat > "$backup/paths" <<'PATHS'
 /usr/libexec/f50adguard-worker
 /usr/libexec/f50-dns-route
 /usr/share/rpcd/acl.d/luci-app-f50adguard.json
+/usr/libexec/f50-wifi-nondfs
+/usr/libexec/f50-wifi-start-safe
+/etc/init.d/mu300-hw
+/etc/config/wireless
+/etc/config/unisoc_modem
+/usr/share/ucode/luci/template/themes/aurora/header.ut
+/usr/share/ucode/luci/template/header.ut
 PATHS
 while IFS= read -r path; do
  if [ -e "$path" ]; then mkdir -p "$backup$(dirname "$path")"; cp -p "$path" "$backup$path"; fi
@@ -110,7 +120,11 @@ f50adguard /usr/libexec/rpcd/f50adguard
 f50adguard-worker /usr/libexec/f50adguard-worker
 f50-dns-route /usr/libexec/f50-dns-route
 luci-app-f50adguard.json /usr/share/rpcd/acl.d/luci-app-f50adguard.json
+f50-wifi-nondfs /usr/libexec/f50-wifi-nondfs
+f50-wifi-start-safe /usr/libexec/f50-wifi-start-safe
 FILES
+chmod 755 /usr/libexec/f50-wifi-nondfs /usr/libexec/f50-wifi-start-safe
+sh apply-reliability.sh
 chmod 755 /usr/libexec/unisoc-modem/dashboard-info /usr/libexec/rpcd/f50quota /usr/libexec/rpcd/f50channel /usr/libexec/rpcd/f50openclash /usr/libexec/f50openclash-worker
 chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
 chmod 755 /usr/libexec/rpcd/f50adguard /usr/libexec/f50adguard-worker /usr/libexec/f50-dns-route
