@@ -31,15 +31,15 @@
 
 手机首模块与负载、快捷控制实拍：
 
-<img src="../assets/dashboard-hero.png" alt="制式、运营商、频段与信号详情" width="390">
+<img src="images/dashboard-desktop-20261010.png" alt="当前电脑端首页完整布局" width="1000">
 
-<img src="../assets/dashboard-mobile.png" alt="手机端用量、八核心占用与六个快捷控制" width="390">
+<img src="images/dashboard-20261010.png" alt="当前手机端完整首页：网络图、流量套餐与快捷控制" width="540">
 
 新版快捷控制（OpenClash 右侧增加 AdGuard Home，锁频段与重启合并）：
 
-<img src="../assets/dashboard-controls.png" alt="流量、能效、5G、OpenClash、AdGuard Home、频段和重启" width="548">
+<img src="images/dashboard-controls-20261010.png" alt="当前手机端更多设置展开界面" width="540">
 
-图中的速率、用量、温度属于截图时的读数；安装后由自己的设备实时采集，套餐总量由自己填写。
+截图更新于 2026-10-10，使用原始 PNG 完整页面截图；点击图片查看原图。图中的速率、用量、温度属于截图时的读数；安装后由自己的设备实时采集，套餐总量由自己填写。
 
 ## 3. 准备与适用版本
 
