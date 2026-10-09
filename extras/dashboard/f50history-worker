@@ -19,5 +19,5 @@ while :; do
   fi
  fi
  n=$(((n+1)%3))
- sleep 3
+ sleep 2
 done

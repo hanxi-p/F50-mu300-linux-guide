@@ -7,10 +7,19 @@ var get=rpc.declare({object:'f50power',method:'status'});
 var set=rpc.declare({object:'f50power',method:'set',params:['mode']});
 var radioGet=rpc.declare({object:'mu300dash',method:'lock_get',nobatch:true,expect:{'':{}}});
 var radioSet=rpc.declare({object:'mu300dash',method:'lock_set',params:['kind','val'],nobatch:true,expect:{'':{}}});
-var SWITCH_ESTIMATE_S={ '4g':20, auto:20 };
+var SWITCH_ESTIMATE_S={ '4g':25, auto:25 };
 return baseclass.extend({mount:function(root){
- var btn=root.querySelector('#mud-btn-power'),nr=root.querySelector('#mud-btn-5g'),timer,radioTimer,disposed=false,waiting=false,deadline=0,targetMode='auto',lastError='',startedAt=0,startedCellTs=0,lastCellTs=0,accepted=false,checking=false,applied=false;
- function paint(){if(disposed)return;nr.disabled=waiting;if(waiting){var left=Math.max(0,Math.ceil((deadline-Date.now())/1000));nr.textContent=left?(applied?'联网 ':'切换 ')+left+'s':applied?'等待网络恢复…':'切换确认中…';}else {nr.textContent=nr.dataset.mode==='4g'?'4G 模式':'自动 5G';nr.appendChild(E('small',{style:'display:block;font-size:10px;line-height:1.3;opacity:.85'},'预计切换需 20 秒'));}nr.title='点击立即切换，预计需 20 秒；联网恢复后自动结束';}
+ var btn=root.querySelector('#mud-btn-power'),nr=root.querySelector('#mud-btn-5g'),timer,radioTimer,disposed=false,waiting=false,deadline=0,targetMode='auto',lastError='',startedAt=0,startedCellTs=0,lastCellTs=0,accepted=false,checking=false,applied=false,powerTarget=null;
+ nr.style.display='flex';nr.style.flexDirection='column';nr.style.alignItems='center';nr.style.justifyContent='center';nr.style.gap='2px';
+ function paint(){if(disposed)return;nr.disabled=waiting;nr.dataset.switching=waiting?'true':'false';nr.dataset.targetMode=waiting?targetMode:'';
+  var label=waiting?targetMode:nr.dataset.mode;
+  nr.textContent=waiting?('切换为'+(targetMode==='4g'?'4G':'5G')):(label==='4g'?'4G 模式':'自动 5G');
+  var hint='';
+  if(waiting){var left=Math.max(0,Math.ceil((deadline-Date.now())/1000));hint=left?'还需'+left+'秒':applied?'正在恢复网络…':'正在确认切换…';}
+  if(waiting)nr.appendChild(E('small',{style:'display:block;font-size:10px;line-height:1.3;opacity:.85'},hint));
+  nr.title='点击立即切换，预计需 25 秒；联网恢复后自动结束';
+ }
+
  function stop(){waiting=false;clearTimeout(radioTimer);radioTimer=null;paint();}
  function checkRadio(){if(disposed||checking)return Promise.resolve();checking=true;return radioGet().then(function(s){
   if(disposed)return;if(s.error)throw new Error(s.error);
@@ -27,14 +36,16 @@ return baseclass.extend({mount:function(root){
  function radioLoop(){if(disposed||!waiting)return;paint();if(Date.now()-startedAt>=150000){stop();ui.addNotification(null,E('p',{},'网络尚未恢复，请查看蜂窝网络状态；已解除按钮锁定，可重新选择制式。'));return;}
   checkRadio().catch(function(){}).finally(function(){if(!disposed&&waiting)radioTimer=setTimeout(radioLoop,1000);});}
  function refresh(){return get().then(function(s){if(disposed)return;
-  btn.textContent=s.busy?'温控模式 · 切换中…':s.mode==='eco'?'能效模式（全小核）':'性能模式（8核）';
+  btn.dataset.switching=s.busy?'true':'false';btn.dataset.targetMode=s.busy?(powerTarget||(s.mode==='eco'?'performance':'eco')):'';
+  btn.textContent=s.busy?((powerTarget|| (s.mode==='eco'?'performance':'eco'))==='performance'?'大核开启中':'大核关闭中'):s.mode==='eco'?'能效模式':'性能模式';
+  if(!s.busy)powerTarget=null;
   btn.title=s.mode==='eco'?'4 个小核，最高 '+(Number(s.max_khz)/1000000).toFixed(3)+' GHz':'8 核，按负载动态调频';
   btn.dataset.mode=s.mode==='eco'?'eco':'performance';btn.disabled=!!s.busy;btn.setAttribute('aria-pressed',s.mode==='eco'?'true':'false');
   root.querySelector('#mud-phone').textContent=s.phone || 'SIM 未提供';
   if(s.error && s.error!==lastError)ui.addNotification(null,E('p',{},s.error));lastError=s.error;
   if(!waiting)return checkRadio();
  });}
- btn.onclick=function(){btn.disabled=true;get().then(function(s){return set(s.mode==='eco'?'performance':'eco');}).then(function(r){if(!r.ok)throw new Error(r.error);return refresh();}).catch(function(e){ui.addNotification(null,E('p',{},e.message));btn.disabled=false;});};
+ btn.onclick=function(){btn.disabled=true;powerTarget=btn.dataset.mode==='eco'?'performance':'eco';btn.dataset.switching='true';btn.dataset.targetMode=powerTarget;btn.textContent=powerTarget==='performance'?'大核开启中':'大核关闭中';get().then(function(s){powerTarget=s.mode==='eco'?'performance':'eco';btn.dataset.targetMode=powerTarget;btn.textContent=powerTarget==='performance'?'大核开启中':'大核关闭中';return set(powerTarget);}).then(function(r){if(!r.ok)throw new Error(r.error);return refresh();}).catch(function(e){ui.addNotification(null,E('p',{},e.message));btn.disabled=false;btn.dataset.switching='false';btn.dataset.targetMode='';refresh().catch(function(){});});};
  nr.onclick=function(){if(waiting||disposed)return;targetMode=nr.dataset.mode==='4g'?'auto':'4g';waiting=true;accepted=false;applied=false;startedAt=Date.now();startedCellTs=lastCellTs;deadline=startedAt+SWITCH_ESTIMATE_S[targetMode]*1000;paint();
   // Send now: the countdown estimates work already in progress, never delays it.
   radioSet('mode',targetMode).then(function(r){if(disposed)return;if(!r.ok)throw new Error(M.errText(r));accepted=true;}).catch(function(e){if(disposed)return;stop();ui.addNotification(null,E('p',{},e.message));checkRadio().catch(function(){});});

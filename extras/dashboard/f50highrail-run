@@ -1,0 +1,7 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+/usr/bin/setsid timeout -k 2 35 /usr/libexec/f50highrail-worker "$1"
+code=$?
+if [ "$code" != 0 ] && [ ! -s /tmp/f50highrail-error ]; then echo '高铁模式操作失败或超时' > /tmp/f50highrail-error; fi
+/usr/libexec/f50-lock sweep /tmp/f50highrail.lock
+exit "$code"

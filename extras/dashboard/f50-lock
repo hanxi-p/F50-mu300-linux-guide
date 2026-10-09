@@ -1,0 +1,42 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+if [ "${1:-}" != inner ]; then
+ exec /usr/bin/setsid timeout -k 1 5 flock /tmp/f50-lock-gc.flock "$0" inner "$@"
+fi
+shift
+action=$1; d=$2; owner=${3:-0}
+case "$d" in /tmp/f50*.lock) ;; *) exit 2;; esac
+ticks() { sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $20}'; }
+alive() {
+ case "$p" in ''|*[!0-9]*) return 1;; esac
+ [ -r "/proc/$p/stat" ] || return 1
+ [ "$(sed 's/.*) //' /proc/$p/stat | cut -d' ' -f1)" != Z ] || return 1
+ if [ -z "$t" ]; then tr '\0' ' ' < "/proc/$p/cmdline" | grep -q 'f50'; else [ "$(ticks "$p")" = "$t" ]; fi
+}
+sweep() {
+ [ -d "$d" ] || return 0
+ p=''; t=''
+ if [ -r "$d/owner" ]; then read -r p t born < "$d/owner"; else p=$(cat "$d/pid" 2>/dev/null); fi
+ alive && return 0
+ age=$(( $(date +%s) - $(/opt/mu300/bin/busybox stat -c %Y "$d" 2>/dev/null || date +%s) ))
+ [ "$age" -ge 15 ] || return 0
+ rm -f "$d/owner" "$d/owner.new" "$d/pid" "$d/target"
+ rmdir "$d" 2>/dev/null || true
+}
+write_owner() {
+ t=$(ticks "$owner"); [ -n "$t" ] || return 1
+ printf '%s %s %s\n' "$owner" "$t" "$(date +%s)" > "$d/owner.new"
+ mv "$d/owner.new" "$d/owner"
+ printf '%s\n' "$owner" > "$d/pid"
+}
+case "$action" in
+sweep) sweep;;
+acquire) sweep; mkdir "$d" 2>/dev/null || exit 1; write_owner || { rmdir "$d" 2>/dev/null; exit 1; };;
+adopt) [ -d "$d" ] || exit 1; write_owner;;
+release)
+ p=$(cat "$d/pid" 2>/dev/null)
+ [ "$p" = "$owner" ] || exit 0
+ rm -f "$d/owner" "$d/pid" "$d/target"
+ rmdir "$d" 2>/dev/null || true;;
+*) exit 2;;
+esac

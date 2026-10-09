@@ -2,12 +2,13 @@
 'require view';
 'require rpc';
 'require f50adguard as F50AdGuard';
+'require f50highrail as F50HighRail';
 'require uci';
 'require mu300.common as M';
 'require f50quota5 as F50Quota';
 'require f50channel as F50Channel';
 'require f50openclash2 as F50OpenClash';
-'require f50power20 as F50Power';
+'require f50powerradio25 as F50Power';
 
 /* MU300 status dashboard -- the LuCI landing page (menu.d hangs it at admin/home).
  *
@@ -102,6 +103,7 @@ return view.extend({
 			self._openclashDispose = F50OpenClash.mount(root);
 			self._powerDispose = F50Power.mount(root);
 			self._adguardDispose = F50AdGuard.mount(root);
+            self._highrailDispose = F50HighRail.mount(root);
 		});
 		/* LuCI poll.add() truncates intervals to whole seconds. Use a one-shot
 		 * timer so 1.5 s remains 1.5 s and slow requests never overlap. */
@@ -121,6 +123,7 @@ return view.extend({
 	unload: function() {
 		clearTimeout(this._refreshTimer);
         if(this._adguardDispose)this._adguardDispose();
+        if(this._highrailDispose)this._highrailDispose();
         if(this._actionsObserver)this._actionsObserver.disconnect();
 		if (this._channelDispose) this._channelDispose();
 		if (this._quotaDispose) this._quotaDispose();
@@ -151,12 +154,12 @@ return view.extend({
   <h3>流量</h3>
   <div class="f50-combined-chart" style="width:100%">
     <div class="f50-rate-head">
-      <div class="f50-rate-download"><b id="mud-dl">--</b><span>下行速率</span></div>
-      <div class="f50-rate-upload"><b id="mud-ul">--</b><span>上行速率</span></div>
+      <div class="f50-rate-download"><b id="mud-dl">--</b><span>下载</span></div>
+      <div class="f50-rate-upload"><b id="mud-ul">--</b><span>上传</span></div>
     </div>
     <div id="mud-rate-chart" style="width:100%;margin:6px 0;touch-action:pan-y"></div>
     <div id="mud-rate-detail" style="display:none;font-size:.75em;margin:4px 0"></div>
-    <div style="display:flex;justify-content:space-between;font-size:.8em;color:var(--text-muted,#777)"><span id="mud-rate-start"></span><span id="mud-rate-window">最近 80 个采样点</span><span id="mud-rate-end"></span></div>
+
   </div>
   <div class="mud-kpis">
     <div class="mud-kpi"><b id="mud-session-rx">--</b><span>本次累计接收</span></div>
@@ -255,12 +258,13 @@ return view.extend({
     <button class="mud-btn" id="mud-btn-power">温控模式</button>
     <button class="mud-btn" id="mud-btn-5g">自动 5G</button>
     <button class="mud-btn" id="mud-btn-openclash" aria-pressed="false">OpenClash · 读取状态…</button>
-    <button class="mud-btn" id="mud-btn-adguard" aria-pressed="false">AdGuard Home</button>
-    <button class="mud-btn" id="mud-btn-other" aria-expanded="false">频段和重启</button>
+    <button class="mud-btn warn" id="mud-btn-reboot">${_('Restart device')}</button>
+    <button class="mud-btn" id="mud-btn-other" aria-expanded="false">更多设置</button>
     <button class="mud-btn" id="mud-btn-wifi">Wi-Fi 开关</button>
+    <button class="mud-btn" id="mud-btn-adguard" aria-pressed="false">AdGuard Home</button>
     <button class="mud-btn" id="mud-btn-channel">信道设置</button>
     <button class="mud-btn warn" id="mud-btn-modem">${_('Restart modem')}</button>
-    <button class="mud-btn warn" id="mud-btn-reboot">${_('Restart device')}</button>
+    <button class="mud-btn" id="mud-btn-highspeed" disabled aria-pressed="false">高铁模式</button>
 
   </div>
 </div>
@@ -279,7 +283,7 @@ return view.extend({
  organize: function(root) {
   root.classList.add('f50-home');
   root.prepend(E('style', {}, `
-   .f50-home{--f50-dl:#0066cc;--f50-ul:#d45d00}
+   .f50-home{--f50-dl:#249ad1;--f50-ul:#159b85}
    .f50-home .f50-rate-head{display:flex;flex-direction:column;gap:3px;margin:5px 0 7px}
    .f50-home .f50-rate-head>div{display:flex;align-items:baseline;gap:9px;min-width:0}
    .f50-home .f50-rate-head b{font-variant-numeric:tabular-nums;line-height:1.2}
@@ -288,7 +292,7 @@ return view.extend({
    .f50-home .f50-rate-upload{color:var(--f50-ul)}
    .f50-home .f50-rate-upload b{font-size:1.4rem;font-weight:650}
    .f50-home .f50-rate-head span{font-size:.72rem;white-space:nowrap;color:var(--text-muted,#777)}
-   html[data-darkmode=true] .f50-home{--f50-dl:#58a6ff;--f50-ul:#ffb45c}
+   html[data-darkmode=true] .f50-home{--f50-dl:#249ad1;--f50-ul:#159b85}
    .f50-home .f50-core-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:6px 0 8px}
    .f50-home .f50-core{padding:7px 9px;border-radius:var(--radius-base,.5rem);background:var(--surface-sunken,rgba(127,127,127,.06));font-size:.72rem}
    .f50-home .f50-core .f50-core-head{display:flex;justify-content:space-between;gap:6px}
@@ -356,11 +360,12 @@ return view.extend({
   var dcols=device.querySelector('.mud-cols'),leases=root.querySelector('#mud-leases'),android=root.querySelector('#mud-btn-android').parentNode;
   wrap([extra,dcols,leases,android],'无线、局域网与设备详情',dcols);
   var other=E('div',{id:'f50-other-controls',class:'mud-ctl f50-other-controls',hidden:true});quick.appendChild(other);
-  ['wifi','channel','modem','reboot','android'].forEach(function(id){other.appendChild(root.querySelector('#mud-btn-'+id));});android.remove();
+  ['wifi','adguard','channel','modem','highspeed','android'].forEach(function(id){other.appendChild(root.querySelector('#mud-btn-'+id));});android.remove();
   var otherBtn=root.querySelector('#mud-btn-other');otherBtn.setAttribute('aria-controls','f50-other-controls');
   otherBtn.onclick=function(){other.hidden=!other.hidden;otherBtn.setAttribute('aria-expanded',String(!other.hidden));};
   var lockTable=locks.querySelector('.mud-scroll');locks.querySelector('h3').remove();
-  var lockContent=E('div',{id:'f50-lock-details',hidden:true},[E('a',{class:'mud-btn',href:L.url('admin','modem','locks'),style:'display:inline-block;margin:6px 0'},'设置制式与频段'),lockTable]);
+  other.appendChild(E('a',{class:'mud-btn',id:'mud-btn-rat-settings',href:L.url('admin','modem','locks')},'设置制式与频段'));
+  var lockContent=E('div',{id:'f50-lock-details',hidden:true},[lockTable]);
   var lockBtn=E('button',{class:'mud-btn',id:'mud-btn-locks','aria-expanded':'false','aria-controls':'f50-lock-details'},'锁制式与频段');
   lockContent.hidden=false;other.appendChild(lockContent);lockContent.style.gridColumn='1 / -1';locks.remove();
   lockBtn.onclick=function(){lockContent.hidden=!lockContent.hidden;lockBtn.setAttribute('aria-expanded',String(!lockContent.hidden));};
@@ -394,15 +399,74 @@ return view.extend({
    .f50-home #mud-ram-sub{display:block}
    .f50-home #mud-temps{display:grid;grid-template-columns:1fr;gap:2px;margin:4px 0 0}
    .f50-home #mud-temps span{display:block;font-size:.65rem;padding:0;border:0;text-align:left;white-space:nowrap}
-   .f50-home .f50-other-controls{margin-top:6px;grid-template-columns:repeat(2,minmax(0,1fr))}
+   .f50-home .f50-other-controls{margin-top:6px;grid-template-columns:repeat(6,minmax(0,1fr))!important}
    .f50-home .f50-primary-controls{grid-template-columns:repeat(6,minmax(0,1fr))}
    .f50-home .mud-ctl .mud-btn{background:#fff;color:#263238;border-color:#dce1e5}
    .f50-home .mud-ctl .mud-btn.on,.f50-home .mud-ctl .mud-btn[aria-pressed=true],.f50-home .mud-ctl .mud-btn[aria-expanded=true]{background:#008cba;border-color:#008cba;color:#fff}
+   .f50-home .f50-primary-controls>.mud-btn,.f50-home .f50-other-controls>.mud-btn{height:46px;min-height:46px;max-height:46px;width:100%;min-width:0;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.25;margin:0;padding:6px;text-decoration:none}
+   .f50-home .f50-other-controls>.mud-btn{background:#fff3e5;color:#9a4800;border:1px solid #f3a34c;font-size:.78rem}
+   .f50-home .f50-other-controls>.mud-btn.on,.f50-home .f50-other-controls>.mud-btn[aria-pressed=true],.f50-home .f50-other-controls>.mud-btn[aria-expanded=true]{background:#ed861b;border-color:#ed861b;color:#fff}
+   .f50-home #mud-neigh .mud-lockbtn{display:inline-block;min-width:3em;padding:1px 8px;border-radius:99px;font-size:.74rem;font-weight:600;text-align:center;white-space:nowrap;line-height:1.5;height:auto;min-height:0;border:0;background:color-mix(in oklab,#238b45 16%,transparent);color:#238b45}
+   .f50-home #mud-neigh .mud-lockbtn.locked{background:#238b45;color:#fff}
+   .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#ed861b!important;border-color:#ed861b!important;color:#fff!important}
+   .f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls .mud-lockbtn.locked{box-shadow:inset 0 0 0 2px rgba(255,255,255,.65)}
+   .f50-home #mud-btn-other,.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{font-size:.78rem!important}
+   .f50-home .f50-primary-controls>.mud-btn{font-size:.78rem!important;font-weight:500!important}
+   .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#238b45!important;border-color:#238b45!important;color:#fff!important;font-weight:500!important}
+   .f50-home #mud-btn-reboot{background:#fff;color:#b52c38;border-color:#e2a5ab}
+   .f50-home #mud-btn-reboot:hover{background:#fff1f2}
+   .f50-home #mud-rate-chart{height:230px!important;background:#fff;border:1px solid #c8dfe7;border-radius:8px;overflow:hidden;color:#385666;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+   .f50-home .f50-rate-svg{left:0;top:22px;width:100%;height:calc(100% - 46px)}
+   .f50-home .f50-btop-label{position:absolute;left:9px;right:9px;display:flex;justify-content:space-between;font-size:11px;line-height:20px;white-space:nowrap;font-variant-numeric:tabular-nums}
+   .f50-home .f50-btop-dl{top:2px;right:50%;color:#249ad1}.f50-home .f50-btop-ul{top:2px;bottom:auto;left:52%;color:#159b85}
+   @media(max-width:600px){.f50-home #mud-rate-chart{height:200px!important}.f50-home .f50-btop-label{font-size:10px}}
+   .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#fff!important;border-color:#238b45!important;color:#238b45!important;box-shadow:none}
+   .f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls>.mud-btn[aria-expanded=true],.f50-home #f50-other-controls .mud-lockbtn.locked{background:#238b45!important;border-color:#238b45!important;color:#fff!important}
+   .f50-home #f50-other-controls #mud-btn-highspeed.f50-highrail-switching{font-size:.65rem!important;white-space:nowrap}
+   .f50-home .f50-rate-time-axis{position:absolute;left:9px;right:9px;bottom:2px;height:19px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #c8dfe7;color:#607985;font-size:10px;font-variant-numeric:tabular-nums}
+   .f50-home .f50-rate-time-axis span{position:relative;padding-top:3px}.f50-home .f50-rate-time-axis span:before{content:'';position:absolute;top:0;height:3px;border-left:1px solid #94b2bf}.f50-home .f50-rate-time-axis span:last-child:before{right:0}
+   .f50-home .f50-rate-svg{left:46px;width:calc(100% - 54px)}
+   .f50-home .f50-rate-value-axis{position:absolute;left:5px;top:22px;bottom:24px;width:37px;display:flex;flex-direction:column;justify-content:space-between;text-align:right;font-size:9px;line-height:1;color:#607985;font-variant-numeric:tabular-nums}
+   .f50-home .f50-rate-value-axis small{font-size:8px}.f50-home .f50-rate-value-axis .f50-axis-dl{color:#249ad1}.f50-home .f50-rate-value-axis .f50-axis-ul{color:#159b85}
+   .f50-home .f50-rate-value-axis{display:block}
+   .f50-home .f50-rate-value-axis>span{position:absolute;right:0;transform:translateY(-50%);white-space:nowrap}
+   .f50-home .f50-rate-axis-unit{position:absolute;left:4px;top:6px;width:38px;text-align:right;color:#607985;font-size:8px;line-height:14px}
+   .f50-home .f50-btop-label{left:46px;right:8px}
+   .f50-home .f50-rate-time-axis{left:46px;right:8px}
+   .f50-home .f50-rate-svg{left:0;width:100%}
+   .f50-home .f50-rate-value-axis{left:5px;width:25px;text-align:left;pointer-events:none;z-index:1}
+   .f50-home .f50-rate-value-axis>span{left:0;right:auto;background:rgba(255,255,255,.8);padding-right:2px}
+   .f50-home .f50-rate-axis-unit{left:5px;width:auto;text-align:left}
+   .f50-home .f50-rate-time-axis{left:0;right:0;padding:0 5px;box-sizing:border-box}
+   .f50-home .f50-btop-dl{left:42px;right:50%}.f50-home .f50-btop-ul{left:52%;right:5px}
+   .f50-home .f50-btop-dl{top:2px;bottom:auto;left:42px;right:5px}
+   .f50-home .f50-btop-ul{top:auto;bottom:25px;left:42px;right:5px;pointer-events:none}
+   .f50-home .f50-rate-axis-unit{display:none}
+   .f50-home .f50-btop-dl{left:5px;right:auto;top:2px;justify-content:flex-start;gap:0}
+   .f50-home .f50-btop-ul{left:5px;right:auto;bottom:25px;justify-content:flex-start;gap:0}
+   .f50-home .f50-btop-label>span:empty{display:none}
+   .f50-home .f50-btop-dl,.f50-home .f50-btop-ul{left:50%;right:auto;transform:translateX(-50%);justify-content:center;white-space:nowrap}
+   .f50-home .f50-btop-dl{top:2px;bottom:auto}.f50-home .f50-btop-ul{top:auto;bottom:2px;z-index:2}
+   .f50-home .f50-btop-label,.f50-home .f50-rate-time-axis{font-size:10px;line-height:16px;height:20px;box-sizing:border-box}
+   .f50-home .f50-btop-dl{top:2px;bottom:auto;align-items:center}
+   .f50-home .f50-btop-ul{top:auto;bottom:2px;align-items:center}
+   .f50-home .f50-rate-time-axis{bottom:2px;border:0;align-items:center}
+   .f50-home .f50-rate-time-axis span{padding-top:0;line-height:16px}
+   .f50-home .f50-rate-time-axis span:before{display:none}
+   .f50-home #mud-btn-power[data-switching=true],.f50-home #mud-btn-5g[data-switching=true]{opacity:1!important;cursor:wait}
+   .f50-home #mud-btn-power[data-switching=true][data-target-mode=eco],.f50-home #mud-btn-5g[data-switching=true][data-target-mode="4g"]{background:#d3eadb!important;border-color:#9fcbb0!important;color:#417c55!important}
+   .f50-home #mud-btn-power[data-switching=true][data-target-mode=performance]{background:#f2d5d5!important;border-color:#dca6a6!important;color:#a85454!important}
+   .f50-home #mud-btn-5g[data-switching=true][data-target-mode=auto]{background:#d2eaf2!important;border-color:#9fc9d9!important;color:#397c94!important}
+   .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#fff!important;border-color:#008cba!important;color:#008cba!important}
+   .f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls>.mud-btn[aria-expanded=true],.f50-home #f50-other-controls .mud-lockbtn.locked{background:#008cba!important;border-color:#008cba!important;color:#fff!important}
+   .f50-home #mud-btn-other:hover,.f50-home #f50-other-controls .mud-btn:hover{filter:brightness(.95)}
    .f50-home #mud-btn-power{white-space:normal;overflow-wrap:anywhere;line-height:1.25}
    .f50-home #mud-btn-power[data-mode=performance]{background:#d63b3b;border-color:#d63b3b;color:#fff}
    .f50-home #mud-btn-power[data-mode=eco]{background:#238b45;border-color:#238b45;color:#fff}
    .f50-home #mud-btn-5g[data-mode="4g"]{background:#238b45;border-color:#238b45;color:#fff}
    @media(max-width:600px){
+    .f50-home .f50-other-controls{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+
     .f50-home .f50-primary-controls{grid-template-columns:repeat(3,minmax(0,1fr))!important}
     .f50-home .f50-primary-controls>.mud-btn{grid-column:auto;padding-left:2px;padding-right:2px;font-size:.7rem;min-width:0}
     .f50-home .mud-hero-l{flex-basis:52%}
@@ -427,13 +491,15 @@ return view.extend({
   var normalized=peak/divisor,power=Math.pow(10,Math.floor(Math.log10(normalized))),fraction=normalized/power;
   peak=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power*divisor;
   function tick(value){return Number((value/divisor).toPrecision(2)).toString();}
-  function pts(arr){return arr.map(function(v,i){return (left+i/historySize*(right-left)).toFixed(1)+','+(bottom-Math.max(0,v)/peak*(bottom-top)).toFixed(1);}).join(' ');}
-  var grid='';for(var j=0;j<=2;j++){var y=top+j/2*(bottom-top);grid+='<line x1="0" y1="'+y+'" x2="900" y2="'+y+'" stroke="currentColor" opacity=".09"/>';}
-  el.innerHTML='<div class="f50-rate-axis"><span>'+tick(peak)+'<small>'+unit+'</small></span><span>'+tick(peak/2)+'</span><span>0</span></div><svg class="f50-rate-svg" role="img" aria-label="上下行速率历史曲线" viewBox="0 0 900 200" preserveAspectRatio="none">'+grid+'<polyline data-series="download" points="'+pts(this.dlHist)+'" stroke="var(--f50-dl,#0066cc)" fill="none" stroke-width="3.5" vector-effect="non-scaling-stroke"/><polyline data-series="upload" points="'+pts(this.ulHist)+'" stroke="var(--f50-ul,#d45d00)" fill="none" stroke-width="3.5" vector-effect="non-scaling-stroke"/><line id="mud-rate-cursor" y1="12" y2="186" stroke="currentColor" opacity=".4" style="display:none"/></svg>';
+  var mid=100,amplitude=88;
+  function pts(arr,up){var result=[];arr.forEach(function(v,i){var x=left+i/historySize*(right-left),y=mid+(up?-1:1)*Math.min(1,Math.max(0,v)/peak)*amplitude;y=Math.round(y/3)*3;if(i)result.push(x.toFixed(1)+','+result[result.length-1].split(',')[1]);result.push(x.toFixed(1)+','+y);});return result.join(' ');}
+  function area(arr,up){return '0,100 '+pts(arr,up)+' 900,100';}
+  var grid='';[12,56,100,144,188].forEach(function(y){grid+='<line x1="0" y1="'+y+'" x2="900" y2="'+y+'" stroke="#557786" opacity=".12"/>';});
+  var latestDl=this.dlHist[this.dlHist.length-1]||0,latestUl=this.ulHist[this.ulHist.length-1]||0;
+  el.innerHTML='<div class="f50-rate-axis-unit">'+unit+'</div><div class="f50-rate-value-axis" aria-label="动态速率纵轴"><span class="f50-axis-dl" style="top:6%">'+tick(peak)+'</span><span class="f50-axis-dl" style="top:28%">'+tick(peak/2)+'</span><span style="top:50%">0</span><span class="f50-axis-ul" style="top:72%">'+tick(peak/2)+'</span><span class="f50-axis-ul" style="top:94%">'+tick(peak)+'</span></div><div class="f50-btop-label f50-btop-dl"><span></span><span>峰值 '+M.fmtRate(Math.max.apply(null,this.dlHist))+'</span></div><svg class="f50-rate-svg" role="img" aria-label="btop 风格上下行速率历史曲线" viewBox="0 0 900 200" preserveAspectRatio="none"><defs><pattern id="f50-net-pixels" width="9" height="6" patternUnits="userSpaceOnUse"><rect width="7" height="4" fill="white"/></pattern><mask id="f50-net-mask"><rect width="900" height="200" fill="url(#f50-net-pixels)"/></mask></defs>'+grid+'<g mask="url(#f50-net-mask)"><polygon data-series="download" points="'+area(this.dlHist,true)+'" fill="#70c8ef"/><polygon data-series="upload" points="'+area(this.ulHist,false)+'" fill="#4dcbb6"/></g><polyline points="'+pts(this.dlHist,true)+'" stroke="#249ad1" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/><polyline points="'+pts(this.ulHist,false)+'" stroke="#159b85" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/><line x1="0" y1="100" x2="900" y2="100" stroke="#adcbd6" stroke-width="1"/><line id="mud-rate-cursor" y1="12" y2="186" stroke="#385666" opacity=".6" style="display:none"/></svg><div class="f50-btop-label f50-btop-ul"><span></span><span>峰值 '+M.fmtRate(Math.max.apply(null,this.ulHist))+'</span></div><div class="f50-rate-time-axis" aria-label="时间坐标轴"><span id="mud-rate-start"></span><span id="mud-rate-end"></span></div>';
   function time(t){return new Date(t).toLocaleTimeString('zh-CN',{hour12:false});}
   M.set('rate-start',time(this.rateTimes[0]));M.set('rate-end',time(this.rateTimes[this.rateTimes.length-1]));
   var seconds=this.rateTimes.length>1?(this.rateTimes[this.rateTimes.length-1]-this.rateTimes[0])/1000:0;
-  M.set('rate-window','最近 '+Math.round(seconds)+' 秒 / '+this.rateTimes.length+' 点');
   el.onpointermove=el.onpointerdown=function(e){
    var r=el.querySelector('svg').getBoundingClientRect(),x=(e.clientX-r.left)/r.width*900;
    var n=Math.max(0,Math.min(self.dlHist.length-1,Math.round((x-left)/(right-left)*historySize)));
@@ -618,7 +684,7 @@ return view.extend({
 			var plmn5 = imsi.substring(0, 5), plmn6 = imsi.substring(0, 6);
 			oper = M.PLMN_CN[plmn5] || M.PLMN_CN[plmn6] || plmn5;
 		}
-		M.set('op', oper.replace('中国广电','广电'));var shortBands=[];if(c && c.nr && c.nr.band)shortBands.push('n'+c.nr.band+(c.nr.bw_mhz?' · '+c.nr.bw_mhz+' MHz':''));if(c && c.lte && c.lte.band)shortBands.push('B'+c.lte.band);M.set('op',oper.replace('中国广电','广电')+' · '+(shortBands.join(' / ') || '等待网络'));M.set('hero-band','');
+		M.set('op', oper.replace(/中国(电信|移动|联通|广电)/g,'$1'));var shortBands=[];if(c && c.nr && c.nr.band)shortBands.push('n'+c.nr.band+(c.nr.bw_mhz?' · '+c.nr.bw_mhz+' MHz':''));if(c && c.lte && c.lte.band)shortBands.push('B'+c.lte.band);M.set('op',oper.replace(/中国(电信|移动|联通|广电)/g,'$1')+' · '+(shortBands.join(' / ') || '等待网络'));M.set('hero-band','');
 
 		var cl = [];
 		if (c && c.nr && c.nr.band) cl.push('n' + c.nr.band + (c.nr.bw_mhz ? ' · ' + c.nr.bw_mhz + ' MHz' : '') + ' · PCI ' + c.nr.pci + ' · ARFCN ' + c.nr.arfcn);

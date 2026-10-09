@@ -1,0 +1,38 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+LOCK=/tmp/f50highrail.lock
+STATE=/tmp/f50highrail.json
+/usr/libexec/f50-lock sweep "$LOCK"
+launch() {
+ /usr/libexec/f50-lock acquire "$LOCK" $$ || return 1
+ printf '%s' "$1" > "$LOCK/target"
+ /usr/bin/setsid /usr/libexec/f50highrail-run "$1" </dev/null >/tmp/f50highrail-control.log 2>&1 &
+}
+case "$1" in
+list) echo '{"status":{},"set_enabled":{"enabled":"Boolean"}}';;
+call)
+ case "$2" in
+ status)
+  enabled=$(jsonfilter -i "$STATE" -e '@.enabled' 2>/dev/null)
+  supported=$(jsonfilter -i "$STATE" -e '@.supported' 2>/dev/null)
+  ts=$(jsonfilter -i "$STATE" -e '@.ts' 2>/dev/null)
+  case "$ts" in ''|*[!0-9]*) ts=0;; esac
+  refresh_age=300; [ -s /tmp/f50highrail-error ] && refresh_age=60
+  if [ "$(( $(date +%s) - ts ))" -gt "$refresh_age" ] && [ ! -d "$LOCK" ]; then launch refresh || true; fi
+  json_init
+  if [ "$enabled" = true ] || [ "$enabled" = 1 ]; then json_add_boolean enabled 1; else json_add_boolean enabled 0; fi
+  if [ "$supported" = true ]; then json_add_boolean supported 1; else json_add_boolean supported 0; fi
+  if [ -d "$LOCK" ]; then json_add_boolean busy 1; else json_add_boolean busy 0; fi
+  json_add_string error "$(cat /tmp/f50highrail-error 2>/dev/null)"
+  json_add_int ts "$ts"; json_dump;;
+ set_enabled)
+  json_load "$(cat)" || exit 1; json_get_var enabled enabled
+  case "$enabled" in 0|1) ;; *) exit 1;; esac
+  json_init
+  if [ -d /run/unisoc-modem-lock-apply ]; then json_add_boolean ok 0; json_add_string error '制式或频段正在切换，请稍候';
+  elif ! launch "$enabled"; then json_add_boolean ok 0; json_add_string error '正在读取或设置高铁模式，请稍候';
+  else rm -f /tmp/f50highrail-error; json_add_boolean ok 1; fi
+  json_dump;;
+ esac;;
+esac
