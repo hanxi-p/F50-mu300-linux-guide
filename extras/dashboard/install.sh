@@ -33,6 +33,7 @@ cat > "$backup/paths" <<'PATHS'
 /usr/libexec/unisoc-modem/dashboard-info
 /www/luci-static/resources/f50quota5.js
 /www/luci-static/resources/f50channel.js
+/www/luci-static/resources/f50channelstate.js
 /www/luci-static/resources/f50openclash.js
 /usr/libexec/rpcd/f50quota
 /usr/libexec/rpcd/f50channel
@@ -102,6 +103,7 @@ while IFS=' ' read -r src target; do
  cp "$src" "$target"
  chmod 644 "$target"
 done <<'FILES'
+f50channel.js /www/luci-static/resources/f50channelstate.js
 f50power.js /www/luci-static/resources/f50powerradio25.js
 f50highrail.js /www/luci-static/resources/f50highrail.js
 f50highrail /usr/libexec/rpcd/f50highrail

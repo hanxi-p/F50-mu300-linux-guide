@@ -6,7 +6,7 @@
 'require uci';
 'require mu300.common as M';
 'require f50quota5 as F50Quota';
-'require f50channel as F50Channel';
+'require f50channelstate as F50Channel';
 'require f50openclash2 as F50OpenClash';
 'require f50powerradio25 as F50Power';
 
@@ -125,6 +125,7 @@ return view.extend({
         if(this._adguardDispose)this._adguardDispose();
         if(this._highrailDispose)this._highrailDispose();
         if(this._actionsObserver)this._actionsObserver.disconnect();
+        if(this._frameObserver)this._frameObserver.disconnect();
 		if (this._channelDispose) this._channelDispose();
 		if (this._quotaDispose) this._quotaDispose();
 		if (this._openclashDispose) this._openclashDispose();
@@ -362,7 +363,16 @@ return view.extend({
   var other=E('div',{id:'f50-other-controls',class:'mud-ctl f50-other-controls',hidden:true});quick.appendChild(other);
   ['wifi','adguard','channel','modem','highspeed','android'].forEach(function(id){other.appendChild(root.querySelector('#mud-btn-'+id));});android.remove();
   var otherBtn=root.querySelector('#mud-btn-other');otherBtn.setAttribute('aria-controls','f50-other-controls');
-  otherBtn.onclick=function(){other.hidden=!other.hidden;otherBtn.setAttribute('aria-expanded',String(!other.hidden));};
+  otherBtn.onclick=function(){other.hidden=!other.hidden;otherBtn.setAttribute('aria-expanded',String(!other.hidden));root.classList.toggle('f50-more-open',!other.hidden);drawMoreFrame();};
+  quick.classList.add('f50-controls-section');
+  var frame=E('div',{class:'f50-more-frame','aria-hidden':'true',hidden:true});
+  frame.innerHTML='<svg><path fill="rgba(0,140,186,.035)" stroke="#008cba" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>';quick.appendChild(frame);
+  function drawMoreFrame(){frame.hidden=other.hidden;if(other.hidden)return;var base=quick.getBoundingClientRect(),b=otherBtn.getBoundingClientRect(),a=other.getBoundingClientRect(),r=7;
+   var l=a.left-base.left-5,right=a.right-base.left+5,top=b.top-base.top-5,bottom=a.bottom-base.top+5,step=a.top-base.top-6,x=b.left-base.left-5;
+   var d='M '+(x+r)+' '+top+' H '+(right-r)+' Q '+right+' '+top+' '+right+' '+(top+r)+' V '+(bottom-r)+' Q '+right+' '+bottom+' '+(right-r)+' '+bottom+' H '+(l+r)+' Q '+l+' '+bottom+' '+l+' '+(bottom-r)+' V '+(step+r)+' Q '+l+' '+step+' '+(l+r)+' '+step+' H '+(x-r)+' Q '+x+' '+step+' '+x+' '+(step-r)+' V '+(top+r)+' Q '+x+' '+top+' '+(x+r)+' '+top+' Z';
+   frame.querySelector('path').setAttribute('d',d);
+  }
+  this._frameObserver=new ResizeObserver(drawMoreFrame);this._frameObserver.observe(quick);this._frameObserver.observe(other);
   var lockTable=locks.querySelector('.mud-scroll');locks.querySelector('h3').remove();
   other.appendChild(E('a',{class:'mud-btn',id:'mud-btn-rat-settings',href:L.url('admin','modem','locks')},'设置制式与频段'));
   var lockContent=E('div',{id:'f50-lock-details',hidden:true},[lockTable]);
@@ -409,7 +419,7 @@ return view.extend({
    .f50-home #mud-neigh .mud-lockbtn{display:inline-block;min-width:3em;padding:1px 8px;border-radius:99px;font-size:.74rem;font-weight:600;text-align:center;white-space:nowrap;line-height:1.5;height:auto;min-height:0;border:0;background:color-mix(in oklab,#238b45 16%,transparent);color:#238b45}
    .f50-home #mud-neigh .mud-lockbtn.locked{background:#238b45;color:#fff}
    .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#ed861b!important;border-color:#ed861b!important;color:#fff!important}
-   .f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls .mud-lockbtn.locked{box-shadow:inset 0 0 0 2px rgba(255,255,255,.65)}
+   .f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls .mud-lockbtn.locked{box-shadow:none}
    .f50-home #mud-btn-other,.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{font-size:.78rem!important}
    .f50-home .f50-primary-controls>.mud-btn{font-size:.78rem!important;font-weight:500!important}
    .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#238b45!important;border-color:#238b45!important;color:#fff!important;font-weight:500!important}
@@ -459,6 +469,13 @@ return view.extend({
    .f50-home #mud-btn-5g[data-switching=true][data-target-mode=auto]{background:#d2eaf2!important;border-color:#9fc9d9!important;color:#397c94!important}
    .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#fff!important;border-color:#008cba!important;color:#008cba!important}
    .f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls>.mud-btn[aria-expanded=true],.f50-home #f50-other-controls .mud-lockbtn.locked{background:#008cba!important;border-color:#008cba!important;color:#fff!important}
+   .f50-home #mud-btn-other{font-weight:650!important;position:relative;box-shadow:none!important}
+   .f50-home #mud-btn-other:after,.f50-home #f50-other-controls:before,.f50-home #f50-other-controls:after{display:none!important;content:none!important}
+   .f50-home #f50-other-controls{padding:0;border:0;border-radius:0;margin-top:14px;background:transparent;overflow:visible}
+   .f50-home .f50-controls-section{position:relative;isolation:isolate}
+   .f50-home .f50-more-frame{position:absolute;inset:0;pointer-events:none;z-index:-1;overflow:visible}
+   .f50-home .f50-more-frame svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+   @media(max-width:600px){.f50-home .mud-ctl.f50-primary-controls{grid-template-columns:repeat(2,minmax(0,1fr))!important}.f50-home #f50-other-controls{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
    .f50-home #mud-btn-other:hover,.f50-home #f50-other-controls .mud-btn:hover{filter:brightness(.95)}
    .f50-home #mud-btn-power{white-space:normal;overflow-wrap:anywhere;line-height:1.25}
    .f50-home #mud-btn-power[data-mode=performance]{background:#d63b3b;border-color:#d63b3b;color:#fff}

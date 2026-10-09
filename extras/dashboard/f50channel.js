@@ -6,7 +6,7 @@ var get=rpc.declare({object:'f50channel',method:'status'});
 var set=rpc.declare({object:'f50channel',method:'set',params:['channel']});
 return baseclass.extend({mount:function(root){
  var btn=root.querySelector('#mud-btn-channel'),timer,disposed=false;
- function refresh(){return get().then(function(s){btn.textContent='信道 · '+(s.channel==='auto'?'自动':'手动 '+s.channel);}).catch(function(){btn.textContent='信道设置';});}
+ function refresh(){return get().then(function(s){if(disposed)return;var auto=s.channel==='auto';btn.textContent='信道 · '+(auto?'自动':'手动 '+s.channel);btn.classList.toggle('on',auto);btn.setAttribute('aria-pressed',String(auto));}).catch(function(){btn.textContent='信道设置';btn.classList.remove('on');btn.setAttribute('aria-pressed','false');});}
  btn.onclick=function(){btn.disabled=true;get().then(function(s){
   if(!s.ok)throw new Error(s.error);
   var mode=E('select',{id:'f50-channel-mode',style:'width:100%'},[E('option',{value:'auto'},'自动'),E('option',{value:'manual'},'手动')]);
