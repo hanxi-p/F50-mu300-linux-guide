@@ -1,7 +1,7 @@
 #!/bin/sh
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
 if [ "${1:-}" != inner ]; then
- exec /usr/bin/setsid timeout -k 1 5 flock /tmp/f50-lock-gc.flock "$0" inner "$@"
+ exec /usr/libexec/f50-bounded 5 flock /tmp/f50-lock-gc.flock "$0" inner "$@"
 fi
 shift
 action=$1; d=$2; owner=${3:-0}

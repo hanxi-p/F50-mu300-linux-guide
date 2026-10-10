@@ -1,20 +1,52 @@
 #!/bin/sh
 set -eu
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-api=$(uci -q get f50dashboard.main.adguard_url || echo "http://$(uci -q get network.lan.ipaddr):3000")
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+LOCK=/tmp/f50dns-route.lock
+n=0
+until /usr/libexec/f50-lock acquire "$LOCK" $$; do
+ n=$((n+1)); [ "$n" -lt 8 ] || exit 1; sleep 1
+done
+trap '/usr/libexec/f50-lock release "$LOCK" $$' EXIT
+trap 'exit 1' INT TERM
 proxy=${1:-auto}
 if [ "$proxy" = auto ]; then if pidof clash >/dev/null; then proxy=1; else proxy=0; fi; fi
+clash_ok=0; agh_ok=0
+if [ "$proxy" = 1 ] && /usr/libexec/f50-dns-health 7874; then clash_ok=1; fi
 if [ "${2:-auto}" != off ] && pidof AdGuardHome >/dev/null; then
- if [ "$proxy" = 1 ]; then config='{"upstream_dns":["127.0.0.1:7874"],"fallback_dns":["223.5.5.5","119.29.29.29"]}'; else config='{"upstream_dns":["223.5.5.5","119.29.29.29"],"fallback_dns":[]}'; fi
- curl -fsS --max-time 5 --retry 5 --retry-connrefused --retry-delay 1 --netrc-file /etc/f50openclash-adguard.netrc -H 'Content-Type: application/json' --data "$config" "${api%/}/control/dns_config" >/dev/null
- curl -fsS --max-time 5 --netrc-file /etc/f50openclash-adguard.netrc -X POST "${api%/}/control/cache_clear" >/dev/null
- upstream='127.0.0.1#5353'
-elif [ "$proxy" = 1 ]; then upstream='127.0.0.1#7874'; else upstream=''; fi
+ api=$(uci -q get f50dashboard.main.adguard_url || echo "http://$(uci -q get network.lan.ipaddr):3000")
+ if [ "$clash_ok" = 1 ]; then
+  config='{"upstream_dns":["127.0.0.1:7874"],"fallback_dns":["223.5.5.5","119.29.29.29"]}'
+ else
+  config='{"upstream_dns":["223.5.5.5","119.29.29.29"],"fallback_dns":[]}'
+ fi
+ signature="$(pidof AdGuardHome)|$(pidof clash || true)|$clash_ok|$api"
+ if [ "$(cat /tmp/f50-dns-configured 2>/dev/null || true)" = "$signature" ]; then configured=1
+ elif curl -fsS --connect-timeout 2 --max-time 5 --netrc-file /etc/f50openclash-adguard.netrc -H 'Content-Type: application/json' --data "$config" "${api%/}/control/dns_config" >/dev/null; then
+  printf '%s' "$signature" > /tmp/f50-dns-configured
+  curl -fsS --max-time 3 --netrc-file /etc/f50openclash-adguard.netrc -X POST "${api%/}/control/cache_clear" >/dev/null || true
+  configured=1
+ else configured=0; fi
+ if [ "$configured" = 1 ] && /usr/libexec/f50-dns-health 5353; then agh_ok=1; fi
+fi
+if [ "$agh_ok" = 1 ]; then upstream='127.0.0.1#5353'
+elif [ "$clash_ok" = 1 ]; then upstream='127.0.0.1#7874'
+else upstream=''; fi
+if { [ "${2:-auto}" != off ] && pidof AdGuardHome >/dev/null && [ "$agh_ok" = 0 ]; } || { [ "$proxy" = 1 ] && [ "$clash_ok" = 0 ]; }; then
+ echo 'DNS service unhealthy; temporary bypass' > /tmp/f50-dns-bypass
+else rm -f /tmp/f50-dns-bypass; fi
 old_server=$(uci -q get dhcp.@dnsmasq[0].server || true)
 old_noresolv=$(uci -q get dhcp.@dnsmasq[0].noresolv || echo 0)
 new_noresolv=0; [ -z "$upstream" ] || new_noresolv=1
-[ "$old_server" != "$upstream" ] || [ "$old_noresolv" != "$new_noresolv" ] || { /etc/init.d/dnsmasq reload; exit 0; }
-uci -q delete dhcp.@dnsmasq[0].server || true
-if [ -n "$upstream" ]; then uci add_list dhcp.@dnsmasq[0].server="$upstream"; uci set dhcp.@dnsmasq[0].noresolv=1; else uci set dhcp.@dnsmasq[0].noresolv=0; uci set dhcp.@dnsmasq[0].resolvfile=/tmp/resolv.conf.d/resolv.conf.auto; fi
-uci commit dhcp
-/etc/init.d/dnsmasq reload
+if [ "$old_server" != "$upstream" ] || [ "$old_noresolv" != "$new_noresolv" ]; then
+ uci -q delete dhcp.@dnsmasq[0].server || true
+ if [ -n "$upstream" ]; then
+  uci add_list dhcp.@dnsmasq[0].server="$upstream"
+  uci set dhcp.@dnsmasq[0].noresolv=1
+ else
+  uci set dhcp.@dnsmasq[0].noresolv=0
+  uci set dhcp.@dnsmasq[0].resolvfile=/tmp/resolv.conf.d/resolv.conf.auto
+ fi
+ uci commit dhcp
+ /usr/libexec/f50-bounded 15 /etc/init.d/dnsmasq reload || exit 1
+ logger -t f50-dns "upstream=${upstream:-WAN} bypass=$(test -f /tmp/f50-dns-bypass && echo yes || echo no)"
+fi

@@ -30,8 +30,8 @@ LIB=${0%/*}/../../share/unisoc-modem/lib.sh
 
 BB=/opt/mu300/bin/busybox
 [ -x "$BB" ] || BB=busybox
-t3() { "$BB" timeout -s KILL 3 "$@" 2>/dev/null; }   # external asks: netifd, uci, iw...
-t2() { "$BB" timeout -s KILL 2 "$@" 2>/dev/null; }
+t3() { /usr/libexec/f50-bounded 3 "$@" 2>/dev/null; }   # external asks: netifd, uci, iw...
+t2() { /usr/libexec/f50-bounded 2 "$@" 2>/dev/null; }
 
 rd() { cat "$1" 2>/dev/null; }
 # numbers and strings through the shared helpers (lib.sh): host names, SSIDs

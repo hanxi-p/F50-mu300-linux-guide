@@ -467,9 +467,12 @@ return view.extend({
    .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#fff!important;border-color:#008cba!important;color:#008cba!important}
    .f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls>.mud-btn[aria-expanded=true],.f50-home #f50-other-controls .mud-lockbtn.locked{background:#008cba!important;border-color:#008cba!important;color:#fff!important}
    .f50-home #mud-btn-other{font-weight:650!important;position:relative;box-shadow:none!important}
-   .f50-home .f50-primary-controls>.mud-btn{font-size:1rem!important;font-weight:600!important}
-   .f50-home #f50-other-controls>.mud-btn{font-size:clamp(.875rem,2.6vw,1rem)!important;font-weight:600!important}
-   .f50-home #mud-btn-other{font-size:1rem!important}
+   .f50-home .f50-primary-controls>.mud-btn{font-size:.82rem!important;font-weight:600!important}
+   .f50-home #f50-other-controls>.mud-btn{font-size:.82rem!important;font-weight:600!important}
+   .f50-home #mud-btn-other{font-size:.82rem!important}
+   .f50-home #f50-lock-details table td{font-size:calc(.8rem - 1px)!important}
+   .f50-home #f50-lock-details table th{font-size:calc(.72rem - 1px)!important}
+   .f50-home #f50-other-controls #mud-neigh .mud-lockbtn{font-size:calc(.78rem - 1px)!important}
    .f50-home #mud-btn-other:after,.f50-home #f50-other-controls:before,.f50-home #f50-other-controls:after{display:none!important;content:none!important}
    .f50-home #f50-other-controls{padding:0;border:0;border-radius:0;margin-top:14px;background:transparent;overflow:visible}
    .f50-home .f50-controls-section{position:relative;isolation:isolate}

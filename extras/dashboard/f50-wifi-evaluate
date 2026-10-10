@@ -1,0 +1,6 @@
+#!/bin/sh
+# AP health first: an in-progress edit must not interrupt an already working AP.
+status=$1; carrier=$2; pending=$3; age=$4
+if [ "$status" = ENABLED ] && [ "$carrier" = 1 ]; then echo healthy
+elif [ "$pending" = true ] && [ "$age" -lt 180 ]; then echo pending
+else echo broken; fi

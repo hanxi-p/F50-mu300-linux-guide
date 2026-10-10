@@ -19,6 +19,10 @@ if /etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo
 if /etc/init.d/vnstat running; then echo 1 > "$backup/vnstat.running"; else echo 0 > "$backup/vnstat.running"; fi
 if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$backup/f50power.enabled"; else echo 0 > "$backup/f50power.enabled"; fi
 if [ -x /etc/init.d/f50history ] && /etc/init.d/f50history enabled; then echo 1 > "$backup/f50history.enabled"; else echo 0 > "$backup/f50history.enabled"; fi
+for service in f50-wifi-guard f50-dns-guard; do
+ if [ -x /etc/init.d/$service ] && /etc/init.d/$service enabled; then echo 1 > "$backup/$service.enabled"; else echo 0 > "$backup/$service.enabled"; fi
+ if [ -x /etc/init.d/$service ] && /etc/init.d/$service running; then echo 1 > "$backup/$service.running"; else echo 0 > "$backup/$service.running"; fi
+done
 cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/f50powerradio25.js
 /usr/libexec/f50-lock
@@ -66,6 +70,13 @@ cat > "$backup/paths" <<'PATHS'
 /etc/config/unisoc_modem
 /usr/share/ucode/luci/template/themes/aurora/header.ut
 /usr/share/ucode/luci/template/header.ut
+/usr/libexec/f50-bounded
+/usr/libexec/f50-wifi-guard
+/usr/libexec/f50-wifi-evaluate
+/etc/init.d/f50-wifi-guard
+/usr/libexec/f50-dns-guard
+/usr/libexec/f50-dns-health
+/etc/init.d/f50-dns-guard
 PATHS
 while IFS= read -r path; do
  if [ -e "$path" ]; then mkdir -p "$backup$(dirname "$path")"; cp -p "$path" "$backup$path"; fi
@@ -84,7 +95,7 @@ case "$old_dir" in /tmp*|/var*|'')
  printf '\nDatabaseDir "/opt/vnstat"\n' >> /etc/vnstat.conf
  ;;
 esac
-for setting in 'SaveInterval 5' 'MonthRotate 1' 'MonthlyMonths -1' 'DailyDays 365'; do
+for setting in 'SaveInterval 5' 'MonthRotate 1' 'MonthlyMonths -1' 'DailyDays 365' '64bitInterfaceCounters 1'; do
  key=${setting%% *}
  sed -i "/^[[:space:]]*$key[[:space:]]/d" /etc/vnstat.conf
  printf '%s\n' "$setting" >> /etc/vnstat.conf
@@ -98,6 +109,13 @@ while IFS=' ' read -r src target; do
  cp "$src" "$target"
  chmod 644 "$target"
 done <<'FILES'
+f50-bounded /usr/libexec/f50-bounded
+f50-wifi-guard /usr/libexec/f50-wifi-guard
+f50-wifi-evaluate /usr/libexec/f50-wifi-evaluate
+f50-wifi-guard-init /etc/init.d/f50-wifi-guard
+f50-dns-guard /usr/libexec/f50-dns-guard
+f50-dns-health /usr/libexec/f50-dns-health
+f50-dns-guard-init /etc/init.d/f50-dns-guard
 f50channel.js /www/luci-static/resources/f50channelstate.js
 f50power.js /www/luci-static/resources/f50powerradio25.js
 f50-lock /usr/libexec/f50-lock
@@ -137,6 +155,7 @@ f50-wifi-start-safe /usr/libexec/f50-wifi-start-safe
 FILES
 chmod 755 /usr/libexec/unisoc-modem/lock /usr/libexec/rpcd/mu300dash
 chmod 755 /usr/libexec/f50-wifi-nondfs /usr/libexec/f50-wifi-start-safe
+chmod 755 /usr/libexec/f50-bounded /usr/libexec/f50-wifi-guard /usr/libexec/f50-wifi-evaluate /etc/init.d/f50-wifi-guard /usr/libexec/f50-dns-guard /usr/libexec/f50-dns-health /etc/init.d/f50-dns-guard /usr/libexec/f50-lock
 sh apply-reliability.sh
 chmod 755 /usr/libexec/unisoc-modem/dashboard-info /usr/libexec/rpcd/f50quota /usr/libexec/rpcd/f50channel /usr/libexec/rpcd/f50openclash /usr/libexec/f50openclash-worker
 chmod 755 /usr/libexec/rpcd/f50power /usr/libexec/f50power-worker /etc/init.d/f50power
@@ -157,6 +176,10 @@ rm -f /www/luci-static/resources/f50highrail.js /usr/libexec/rpcd/f50highrail /u
 /etc/init.d/rpcd restart
 /etc/init.d/f50history enable
 /etc/init.d/f50history start
+/etc/init.d/f50-wifi-guard enable
+/etc/init.d/f50-wifi-guard restart
+/etc/init.d/f50-dns-guard enable
+/etc/init.d/f50-dns-guard restart
 sync
 printf '安装完成；请重新登录并强制刷新首页。\n原页面和配置备份：%s\n恢复命令：sh %s/restore.sh\n' "$backup" "$backup"
 ubus call f50power status >/dev/null

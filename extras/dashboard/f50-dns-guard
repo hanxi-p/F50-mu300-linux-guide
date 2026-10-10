@@ -1,0 +1,28 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+sleep 30
+bad=0; last=''
+while :; do
+ /usr/libexec/f50-lock sweep /tmp/f50dns-switch.lock
+ if [ -d /tmp/f50dns-switch.lock ]; then sleep 15; continue; fi
+ agh=$(pidof AdGuardHome); clash=$(pidof clash)
+ server=$(uci -q get dhcp.@dnsmasq[0].server)
+ state="$agh|$clash|$server"
+ port=53
+ case "$server" in *127.0.0.1#5353*) port=5353;; *127.0.0.1#7874*) port=7874;; esac
+ # Probe the actual selected service: dnsmasq's cache must not hide a dead upstream.
+ if /usr/libexec/f50-dns-health "$port"; then
+  bad=0
+  if [ "$state" != "$last" ] || [ -f /tmp/f50-dns-bypass ]; then
+   /usr/libexec/f50-bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
+  fi
+ else
+  bad=$((bad+1))
+  if [ "$bad" -ge 2 ]; then
+   /usr/libexec/f50-bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
+   bad=0
+  fi
+ fi
+ last="$agh|$clash|$(uci -q get dhcp.@dnsmasq[0].server)"
+ sleep 30
+done

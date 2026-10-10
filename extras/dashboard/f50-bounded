@@ -1,0 +1,20 @@
+#!/bin/sh
+# Run each bounded operation in its own process group; clean descendants too.
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+limit=$1; shift
+case "$limit" in ''|*[!0-9]*) exit 2;; esac
+[ "$limit" -gt 0 ] || exit 2
+worker=''; timer=''
+cleanup() {
+ [ -z "$timer" ] || /opt/mu300/bin/busybox kill -KILL -- "-$timer" 2>/dev/null
+ [ -z "$worker" ] || /opt/mu300/bin/busybox kill -KILL -- "-$worker" 2>/dev/null
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
+/usr/bin/setsid "$@" &
+worker=$!
+/usr/bin/setsid sh -c 'sleep "$1"; /opt/mu300/bin/busybox kill -TERM -- "-$2" 2>/dev/null; sleep 2; /opt/mu300/bin/busybox kill -KILL -- "-$2" 2>/dev/null' sh "$limit" "$worker" &
+timer=$!
+wait "$worker"
+code=$?
+exit "$code"

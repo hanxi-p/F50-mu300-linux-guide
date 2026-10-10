@@ -271,3 +271,41 @@ vnstat -i sipa_eth0 -m
 ## 想让手机首页更紧凑，并直接设置流量套餐？
 
 使用 [可选：首页美化与流量套餐面板](11-optional-dashboard.md)。保留锁频入口，将其他参数折叠，并加入本次 / 本月累计、持久化月度历史和六个快捷控制；配套脚本带原页面与配置备份、恢复入口。
+
+## 后台任务与管理连接稳定性
+
+### 常见故障与处理顺序
+
+| 现象 | 检查证据 | 处理方法 |
+| --- | --- | --- |
+| 页面出现但状态迟迟不更新 | `/tmp/f50-dashboard-live/status.json` 的时间戳、采集进程数量 | 先查缓存生产者；给外部命令加时限，并清理整个进程组，避免超时后留下子进程。 |
+| 热点消失或无法管理 | `ubus call hostapd.wlan0 get_status`、国家码、DFS/CAC、接口状态 | 使用当前地区合法的非 DFS 信道；无线巡检连续确认异常后恢复，手动关闭与编辑期间不干预。 |
+| Wi-Fi 已连接但网页打不开 | 本地 DNS 53、AdGuard 5353、OpenClash 7874 的实际解析 | 检查端口及上游方向，避免 DNS 回指形成循环。服务异常时临时走可用解析器；关闭一个插件不重启另一个。 |
+| 拨号反复失败或 AT busy | 持锁 PID、AT 守护进程、拨号任务 | 只保留一个持锁拨号实例，保留 modem-log-drain，避免多个消费者争抢 AT 串口。 |
+| 运行后越来越慢 | MemAvailable、swap、conntrack、文件描述符、任务数量 | 根据资源证据处理；不要定时清缓存、无条件重启网络或把 loadavg 当 CPU 百分比。 |
+| SD 卡变只读或写入失败 | `dmesg` 中 EXT4/I/O 错误、容量与 Dirty/Writeback | 先备份，检查供电和卡；离线检查文件系统。挂载运行中的根分区不执行修复型 fsck。 |
+| 重启后偶发无 USB、无 Wi-Fi | 内核版本、串口启动记录、上游对应版本问题 | 区分启动失败与服务故障；上游记录的 6.18 启动硬挂不能直接套用到厂商 5.4 内核。 |
+
+### 本机 2026-10-10 加固与验收
+
+新增 `/usr/libexec/f50-bounded`：每个受控命令使用独立进程组，结束或超时后清理子进程。实测设备自带 BusyBox `timeout` 的一次父进程超时测试留下了 `sleep` 子进程；新执行器在超时、正常退出两种测试中均清理了它，并保留正常退出码。
+
+覆盖状态采集、Wi-Fi 巡检与恢复、DNS 巡检与重载，以及共享锁管理。原始文件先备份到设备 `/root/f50-stability-20261010`。无线恢复有连续失败确认、冷却间隔，并尊重用户手动关闭。
+
+验收：三次状态时间戳更新；53/5353 DNS 解析通过；AP `ENABLED`；互联网 ping 3/3；共享锁获取和释放通过；DNS 路由重载返回成功。安装和恢复脚本通过 shell 语法检查。
+
+测试使用临时进程模拟超时，没有制造真实内核死锁或破坏供电。用户态执行器不能解除内核不可中断 I/O；短期验收通过不等于消除了全部驱动或硬件故障。
+
+### 上游资料
+
+- [mu300-linux FINDINGS](https://github.com/dikeckaan/mu300-linux/blob/main/docs/FINDINGS.md)：AT 串口竞争、拨号并发和特定内核启动问题。
+- [OpenWrt procd 服务管理](https://openwrt.org/docs/techref/procd)及 [respawn 行为讨论](https://github.com/openwrt/openwrt/issues/11799)：区分进程退出、重启间隔和持续运行的巡检循环。
+- [AdGuard Home 配置](https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration)：上游、fallback、bootstrap 与本地反向解析各有用途，不能相互回指。
+- [OpenWrt 无线配置](https://openwrt.org/docs/guide-user/network/wifi/basic)：国家码和 DFS 启动条件。
+- [Linux 写回参数](https://kernel.org/doc/html/latest/admin-guide/sysctl/vm.html)：根据 Dirty/Writeback 和存储性能评估，避免未经测量直接调大写回缓存。
+
+### 重启后流量突然多出约 4.295 GB
+
+vnStat 2.13 的自动检测模式存在 Linux 下误判 32 位计数器的已知问题；接口重置时可能被当成回卷，增加 `2^32` 字节。先备份配置和数据库，再将 `/etc/vnstat.conf` 的 `64bitInterfaceCounters` 设为 `1`，重启 vnstat。配套安装器已使用该设置。此设置预防继续误计，不会自动改写此前历史；不要在没有校准依据时清空数据库或直接扣除历史流量。
+
+本机记录出现两次回卷量级，已保留原数据库并应用 64 位处理。参考 [vnStat 上游 CHANGES](https://github.com/vergoh/vnstat/blob/master/CHANGES)和 [配置手册](https://humdi.net/vnstat/man/2.11/vnstat.conf.html)。
