@@ -11,7 +11,7 @@ case "$id" in ''|*[!0-9A-Za-z_-]*) exit 2;; esac
 temp=$(mktemp "$D/outbox/.new.XXXXXX")
 trap 'rm -f "$temp"' EXIT
 trap 'exit 143' TERM INT
-subject=$(printf 'F50 SMS · %s' "${SMS_FROM:-unknown}" | base64 | tr -d '\n')
+subject=$(printf '%s' '来自F50新信息' | /opt/mu300/bin/busybox base64 | tr -d '\n')
 {
  printf 'From: F50 <%s>\r\n' "$FROM"
  printf 'To: %s\r\n' "$TO"
@@ -19,7 +19,7 @@ subject=$(printf 'F50 SMS · %s' "${SMS_FROM:-unknown}" | base64 | tr -d '\n')
  printf 'Date: %s\r\n' "$(date -R)"
  printf 'Message-ID: <f50-sms-%s-%s@163.com>\r\n' "$id" "$(date +%s)"
  printf 'MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'
- { printf '设备：F50\n短信号码：%s\n接收时间：%s\n\n%s\n' "${SMS_FROM:-unknown}" "${SMS_DATE:-unknown}" "${SMS_TEXT:-}"; } | base64 | sed 's/$/\r/'
+ printf '%s' "${SMS_TEXT:-}" | /opt/mu300/bin/busybox base64 | sed 's/$/\r/'
 } > "$temp"
 chmod 600 "$temp"
 mv "$temp" "$D/outbox/$id.eml"
