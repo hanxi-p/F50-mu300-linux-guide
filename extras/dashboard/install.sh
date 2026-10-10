@@ -21,12 +21,7 @@ if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$
 if [ -x /etc/init.d/f50history ] && /etc/init.d/f50history enabled; then echo 1 > "$backup/f50history.enabled"; else echo 0 > "$backup/f50history.enabled"; fi
 cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/f50powerradio25.js
-/www/luci-static/resources/f50highrail.js
-/usr/libexec/rpcd/f50highrail
-/usr/libexec/f50highrail-worker
-/usr/libexec/f50highrail-run
 /usr/libexec/f50-lock
-/usr/share/rpcd/acl.d/luci-app-f50highrail.json
 /www/luci-static/resources/view/mu300/home.js
 /usr/libexec/unisoc-modem/lock
 /usr/libexec/rpcd/mu300dash
@@ -105,12 +100,7 @@ while IFS=' ' read -r src target; do
 done <<'FILES'
 f50channel.js /www/luci-static/resources/f50channelstate.js
 f50power.js /www/luci-static/resources/f50powerradio25.js
-f50highrail.js /www/luci-static/resources/f50highrail.js
-f50highrail /usr/libexec/rpcd/f50highrail
-f50highrail-worker /usr/libexec/f50highrail-worker
-f50highrail-run /usr/libexec/f50highrail-run
 f50-lock /usr/libexec/f50-lock
-luci-app-f50highrail.json /usr/share/rpcd/acl.d/luci-app-f50highrail.json
 modem-lock /usr/libexec/unisoc-modem/lock
 mu300dash /usr/libexec/rpcd/mu300dash
 home.js /www/luci-static/resources/view/mu300/home.js
@@ -159,7 +149,6 @@ chmod 755 /usr/libexec/rpcd/f50history /usr/libexec/f50history-worker /etc/init.
 # Session lifetime is LuCI sauth.sessiontime, not rpcd executable timeout.
 uci set luci.sauth.sessiontime=7200
 uci commit luci
-chmod 755 /usr/libexec/rpcd/f50highrail /usr/libexec/f50highrail-worker /usr/libexec/f50highrail-run /usr/libexec/f50-lock
 uci set unisoc_modem.main.home_refresh_interval=2
 uci commit unisoc_modem
 /etc/init.d/rpcd restart
@@ -171,3 +160,7 @@ ubus call f50power status >/dev/null
 ubus call f50quota status >/dev/null
 ubus call f50channel status >/dev/null
 ubus call f50openclash status >/dev/null
+
+chmod 755 /usr/libexec/f50-lock
+# Remove retired dashboard extension when upgrading.
+rm -f /www/luci-static/resources/f50highrail.js /usr/libexec/rpcd/f50highrail /usr/libexec/f50highrail-worker /usr/libexec/f50highrail-run /usr/share/rpcd/acl.d/luci-app-f50highrail.json

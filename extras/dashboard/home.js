@@ -2,7 +2,6 @@
 'require view';
 'require rpc';
 'require f50adguard as F50AdGuard';
-'require f50highrail as F50HighRail';
 'require uci';
 'require mu300.common as M';
 'require f50quota5 as F50Quota';
@@ -103,7 +102,6 @@ return view.extend({
 			self._openclashDispose = F50OpenClash.mount(root);
 			self._powerDispose = F50Power.mount(root);
 			self._adguardDispose = F50AdGuard.mount(root);
-            self._highrailDispose = F50HighRail.mount(root);
 		});
 		/* LuCI poll.add() truncates intervals to whole seconds. Use a one-shot
 		 * timer so 1.5 s remains 1.5 s and slow requests never overlap. */
@@ -123,7 +121,6 @@ return view.extend({
 	unload: function() {
 		clearTimeout(this._refreshTimer);
         if(this._adguardDispose)this._adguardDispose();
-        if(this._highrailDispose)this._highrailDispose();
         if(this._actionsObserver)this._actionsObserver.disconnect();
         if(this._frameObserver)this._frameObserver.disconnect();
 		if (this._channelDispose) this._channelDispose();
@@ -265,7 +262,6 @@ return view.extend({
     <button class="mud-btn" id="mud-btn-adguard" aria-pressed="false">AdGuard Home</button>
     <button class="mud-btn" id="mud-btn-channel">信道设置</button>
     <button class="mud-btn warn" id="mud-btn-modem">${_('Restart modem')}</button>
-    <button class="mud-btn" id="mud-btn-highspeed" disabled aria-pressed="false">高铁模式</button>
 
   </div>
 </div>
@@ -363,7 +359,7 @@ return view.extend({
   var dcols=device.querySelector('.mud-cols'),leases=root.querySelector('#mud-leases'),android=root.querySelector('#mud-btn-android').parentNode;
   wrap([extra,dcols,leases,android],'无线、局域网与设备详情',dcols);
   var other=E('div',{id:'f50-other-controls',class:'mud-ctl f50-other-controls',hidden:true});quick.appendChild(other);
-  ['wifi','adguard','channel','modem','highspeed','android'].forEach(function(id){other.appendChild(root.querySelector('#mud-btn-'+id));});android.remove();
+  ['wifi','adguard','channel','modem','android'].forEach(function(id){other.appendChild(root.querySelector('#mud-btn-'+id));});android.remove();
   var otherBtn=root.querySelector('#mud-btn-other');otherBtn.setAttribute('aria-controls','f50-other-controls');
   otherBtn.onclick=function(){other.hidden=!other.hidden;otherBtn.setAttribute('aria-expanded',String(!other.hidden));root.classList.toggle('f50-more-open',!other.hidden);drawMoreFrame();};
   quick.classList.add('f50-controls-section');
@@ -434,7 +430,6 @@ return view.extend({
    @media(max-width:600px){.f50-home #mud-rate-chart{height:200px!important}.f50-home .f50-btop-label{font-size:10px}}
    .f50-home #mud-btn-other,.f50-home #mud-btn-other[aria-expanded=false],.f50-home #f50-other-controls>.mud-btn,.f50-home #f50-other-controls .mud-lockbtn{background:#fff!important;border-color:#238b45!important;color:#238b45!important;box-shadow:none}
    .f50-home #mud-btn-other[aria-expanded=true],.f50-home #f50-other-controls>.mud-btn.on,.f50-home #f50-other-controls>.mud-btn[aria-pressed=true],.f50-home #f50-other-controls>.mud-btn[aria-expanded=true],.f50-home #f50-other-controls .mud-lockbtn.locked{background:#238b45!important;border-color:#238b45!important;color:#fff!important}
-   .f50-home #f50-other-controls #mud-btn-highspeed.f50-highrail-switching{font-size:.65rem!important;white-space:nowrap}
    .f50-home .f50-rate-time-axis{position:absolute;left:9px;right:9px;bottom:2px;height:19px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #c8dfe7;color:#607985;font-size:10px;font-variant-numeric:tabular-nums}
    .f50-home .f50-rate-time-axis span{position:relative;padding-top:3px}.f50-home .f50-rate-time-axis span:before{content:'';position:absolute;top:0;height:3px;border-left:1px solid #94b2bf}.f50-home .f50-rate-time-axis span:last-child:before{right:0}
    .f50-home .f50-rate-svg{left:46px;width:calc(100% - 54px)}
@@ -475,7 +470,6 @@ return view.extend({
    .f50-home .f50-primary-controls>.mud-btn{font-size:1rem!important;font-weight:600!important}
    .f50-home #f50-other-controls>.mud-btn{font-size:clamp(.875rem,2.6vw,1rem)!important;font-weight:600!important}
    .f50-home #mud-btn-other{font-size:1rem!important}
-   .f50-home #f50-other-controls #mud-btn-highspeed.f50-highrail-switching{font-size:.75rem!important}
    .f50-home #mud-btn-other:after,.f50-home #f50-other-controls:before,.f50-home #f50-other-controls:after{display:none!important;content:none!important}
    .f50-home #f50-other-controls{padding:0;border:0;border-radius:0;margin-top:14px;background:transparent;overflow:visible}
    .f50-home .f50-controls-section{position:relative;isolation:isolate}
