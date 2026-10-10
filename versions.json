@@ -64,7 +64,7 @@
       "directory": "extras/sms-email",
       "smtp": "implicit TLS / 465",
       "client": "msmtp 1.8.32",
-      "verification": "SMTP hello accepted; service enabled; public queue fixture passed; real new-SMS recipient confirmation pending"
+      "verification": "SMTP DATA verified: subject and exact hello body transmitted and accepted; real new-SMS recipient confirmation pending"
     },
     "dashboard_reliability": "2026-10-10 process cleanup, shared control worker, modem and collector flock"
   }

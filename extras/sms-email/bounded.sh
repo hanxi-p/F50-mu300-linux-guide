@@ -29,7 +29,10 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 143' TERM INT
-/usr/bin/setsid "$@" &
+# Preserve caller input: ash otherwise gives asynchronous jobs /dev/null.
+exec 3<&0
+/usr/bin/setsid "$@" <&3 3<&- &
+exec 3<&-
 worker=$!
 /usr/bin/setsid sh -c 'sleep "$1"; /opt/mu300/bin/busybox kill -TERM "-$2" 2>/dev/null; sleep 5; /opt/mu300/bin/busybox kill -KILL "-$2" 2>/dev/null' sh "$limit" "$worker" &
 timer=$!
