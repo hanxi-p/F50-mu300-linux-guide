@@ -1,5 +1,18 @@
 #!/bin/sh
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+# Track bounded children so service stop also releases their locks/groups.
+child=''
+cleanup() {
+ trap '' TERM INT
+ if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child" 2>/dev/null || true; fi
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
+bounded() {
+ /usr/libexec/f50-bounded "$@" & child=$!
+ wait "$child"; rc=$?; child=''
+ return "$rc"
+}
 sleep 30
 bad=0; last=''
 while :; do
@@ -14,12 +27,12 @@ while :; do
  if /usr/libexec/f50-dns-health "$port"; then
   bad=0
   if [ "$state" != "$last" ] || [ -f /tmp/f50-dns-bypass ]; then
-   /usr/libexec/f50-bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
+   bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
   fi
  else
   bad=$((bad+1))
   if [ "$bad" -ge 2 ]; then
-   /usr/libexec/f50-bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
+   bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
    bad=0
   fi
  fi

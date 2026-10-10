@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 [ "$(id -u)" = 0 ] || { echo '请使用 root SSH 执行'; exit 1; }
 version=$(cat /etc/mu300/image-version 2>/dev/null || true)
 [ "$version" = v2026.10.11 ] || { echo "此补丁匹配 v2026.10.11，当前为 $version；请先核对页面与 RPC 差异。"; exit 1; }
-for cmd in vnstat ubus uci jsonfilter setsid sha256sum curl; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd，请先安装对应依赖"; exit 1; }; done
+for cmd in vnstat ubus uci jsonfilter setsid flock sha256sum curl; do command -v "$cmd" >/dev/null || { echo "缺少 $cmd，请先安装对应依赖"; exit 1; }; done
 [ -r /usr/libexec/unisoc-modem/dashboard-info ] && [ -r /www/luci-static/resources/view/mu300/home.js ] || { echo '缺少 MU300 面板'; exit 1; }
 ip link show sipa_eth0 >/dev/null || { echo '当前蜂窝接口不是 sipa_eth0，请先适配统计接口'; exit 1; }
 [ "$(uci -q get wireless.radio0.band)" = 5g ] && [ "$(uci -q get wireless.ap0.device)" = radio0 ] || { echo '此版本匹配 radio0 / ap0 和 5GHz 无线，请先适配'; exit 1; }

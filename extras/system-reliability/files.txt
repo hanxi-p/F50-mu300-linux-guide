@@ -1,0 +1,9 @@
+ndp-learn /opt/mu300/bin/ndp-learn
+mu300-sms /opt/mu300/bin/mu300-sms
+mu300-smsd /opt/mu300/bin/mu300-smsd
+mu300-next-boot /opt/mu300/bin/mu300-next-boot
+mu300-update /opt/mu300/bin/mu300-update
+10-mu300-usb /etc/hotplug.d/iface/10-mu300-usb
+19-mu300-fw4 /etc/hotplug.d/iface/19-mu300-fw4
+f50-bounded /usr/libexec/f50-bounded
+modem-lock /usr/libexec/unisoc-modem/lock

@@ -77,9 +77,23 @@ Windows 使用路由 metric 与接口 metric 的组合选择出口。例如网�
 ```powershell
 $MainEthernetIndex = [int](Read-Host '主路由网线接口 ifIndex')
 $F50NetworkIndex = [int](Read-Host 'F50 Wi-Fi / USB 网络接口 ifIndex')
+$F50MetricBackup = Join-Path $F50Work 'network-metric-before.json'
+Get-NetIPInterface -InterfaceIndex $F50NetworkIndex -AddressFamily IPv4 |
+  Select-Object InterfaceIndex,AutomaticMetric,InterfaceMetric |
+  ConvertTo-Json | Set-Content $F50MetricBackup -Encoding utf8
 Set-NetIPInterface -InterfaceIndex $MainEthernetIndex -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric 5
 Set-NetIPInterface -InterfaceIndex $F50NetworkIndex -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric 100
 Find-NetRoute -RemoteIPAddress 1.1.1.1
+```
+
+**如果这里选的是电脑共用 Wi-Fi 网卡，metric 会影响这个网卡连接的所有 SSID。** 仅在它连接 F50 时临时调整，先保存原 `AutomaticMetric` / `InterfaceMetric`，离开 F50 后恢复；不能把 Wi-Fi 网卡永久设为低优先级。USB 专用接口可以单独设置。
+
+上方命令已在修改前保存原设置。离开 F50 后恢复（核对 ifIndex 仍属于同一网卡）：
+
+```powershell
+$MetricBefore = Get-Content $F50MetricBackup -Raw | ConvertFrom-Json
+Set-NetIPInterface -InterfaceIndex $MetricBefore.InterfaceIndex -AddressFamily IPv4 `
+  -AutomaticMetric $MetricBefore.AutomaticMetric -InterfaceMetric $MetricBefore.InterfaceMetric
 ```
 
 以上针对当前接口的 IPv4，新枚举 USB 接口需重新核对。用上面的默认路由表检查总 metric，必要时对自己的 F50 默认路由调整 RouteMetric；不要删主路由网关。IPv6 出口另看第 5 章。

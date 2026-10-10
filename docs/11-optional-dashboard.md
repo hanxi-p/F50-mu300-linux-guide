@@ -49,7 +49,7 @@
 - [ ] 使用 PowerShell、Python 3、Git 和电脑现有 OpenSSH；软件下载与准备交给 Codex。
 - [ ] 保留当前 SSH Host 与管理地址，记录原信道和已有套餐设置。
 
-这是一套固定版本的 **LuCI 首页与采集脚本补丁**。它更新前端、对应 RPC / ACL 和逐核心采集，不写启动槽、Android 分区或内核。Wi-Fi 信道由快捷按钮按当前国家码、频段和带宽筛选；安装本身保留当前无线设置。
+这是一套固定版本的 **LuCI 首页与采集脚本补丁**。它更新前端、对应 RPC / ACL 和逐核心采集，不写启动槽、Android 分区或内核。Wi-Fi 信道由快捷按钮按当前国家码、频段和带宽筛选；安装保留 SSID、密码和国家码；若现有信道不在当前地区合法的非 DFS 信道组内，安装器改用安全自动信道。
 
 新版本 mu300-linux 的页面、RPC 或无线结构变化时，先对照作者新版本适配。软件与底层驱动继续由 [dikeckaan/mu300-linux](https://github.com/dikeckaan/mu300-linux) 提供。
 
@@ -61,7 +61,7 @@
 cat /etc/mu300/image-version
 ip link show sipa_eth0
 apk update
-apk add vnstat2
+apk add vnstat2 flock curl
 vnstat --version
 ```
 
@@ -235,3 +235,9 @@ Codex 验收时核对 `/sys/devices/system/cpu/online`：能效为 `0-3`，性�
 ## 短信邮件转发与其他可选功能
 
 短信转发独立于首页美化，安装与测试见 [第十二章](12-optional-features.md)。本配套同步了进程组清理、性能切换、制式应用锁和采集锁的稳定性修补；`mu300dash` 和 `cell` 配套部署，避免通道占满后采集锁遗留。
+
+### 守护任务退出与锁回收
+
+无线、DNS 和历史采集守护停止时会清理当前分离任务，避免任务继续持锁。历史服务退出后由 procd 重启；活锁核对 PID 与进程开始时间，已确认死亡的持有者立即回收，不依赖墙上时钟。恢复首页时保留共用的 `f50-bounded`，供系统修补或短信转发继续使用。
+
+整体顺序、锁审查和验收方法见 [稳定性检查与复刻验收](reliability-checks.md)。

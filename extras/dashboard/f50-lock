@@ -18,8 +18,15 @@ sweep() {
  p=''; t=''
  if [ -r "$d/owner" ]; then read -r p t born < "$d/owner"; else p=$(cat "$d/pid" 2>/dev/null); fi
  alive && return 0
+ # A published dead owner cannot still hold this directory mutex.
+ # Reap immediately; wall-clock corrections must not prolong a stale lock.
+ case "$p:$t" in *[!0-9:]*|:|*:) ;; *)
+  rm -f "$d/owner" "$d/owner.new" "$d/pid" "$d/target"
+  rmdir "$d" 2>/dev/null || true
+  return 0;;
+ esac
  age=$(( $(date +%s) - $(/opt/mu300/bin/busybox stat -c %Y "$d" 2>/dev/null || date +%s) ))
- [ "$age" -ge 15 ] || return 0
+ { [ "$age" -ge 15 ] || [ "$age" -lt 0 ]; } || return 0
  rm -f "$d/owner" "$d/owner.new" "$d/pid" "$d/target"
  rmdir "$d" 2>/dev/null || true
 }

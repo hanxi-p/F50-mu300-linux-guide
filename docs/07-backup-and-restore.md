@@ -22,7 +22,7 @@ ls -l /dev/block/by-name/boot_a /dev/block/by-name/boot_b
 
 ## 7.3 Windows 保存二进制系统归档
 
-先完成第 5 章的 `ssh f50` 密钥登录。已安装会持续写入数据的扩展服务时，归档前按对应说明暂停，完成后恢复。这里用 cmd 进行原始字节重定向，避免旧 PowerShell 文本重定向破坏 tar / gzip；不要替换成 `Out-File` 或 `Set-Content`。
+先完成第 5 章的 `ssh f50` 密钥登录。已安装会持续写入数据的扩展服务时，记录其运行状态，归档前按对应说明暂停，完成后恢复。包括 vnStat、首页历史采集、短信邮件发送与短信池同步、AdGuard Home 数据库；临时停止 DNS / 无线巡检可避免归档期间改写配置，Wi-Fi 本身保持运行。暂停 AdGuard Home / OpenClash 前切换至可用 DNS，恢复时重新核对 DNS。需要保证备份期间也接收短信时，采用离线备份或快照方案。这里用 cmd 进行原始字节重定向，避免旧 PowerShell 文本重定向破坏 tar / gzip；不要替换成 `Out-File` 或 `Set-Content`。
 
 ```powershell
 $BackupDir = Join-Path $env:USERPROFILE ('F50-backups\WRT-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -30,7 +30,7 @@ New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
 Set-Location $BackupDir
 ssh -o BatchMode=yes f50 'id; df -h /mnt/mu300-disk'
 if ($LASTEXITCODE -ne 0) { throw '先解决 SSH 密钥连接' }
-cmd /d /c 'ssh -o BatchMode=yes f50 "tar -C /mnt/mu300-disk --exclude=openwrt-luci/dev --exclude=openwrt-luci/proc --exclude=openwrt-luci/sys --exclude=openwrt-luci/tmp --exclude=openwrt-luci/run --exclude=openwrt-luci/mnt -czf - .mu300 boot openwrt-luci lost+found" > sd-filesystem.tar.gz'
+cmd /d /c 'ssh -o BatchMode=yes f50 "tar -C /mnt/mu300-disk --exclude=openwrt-luci/dev --exclude=openwrt-luci/proc --exclude=openwrt-luci/sys --exclude=openwrt-luci/tmp --exclude=openwrt-luci/run --exclude=openwrt-luci/mnt --exclude=openwrt-luci/opt/mu300/android/dev --exclude=openwrt-luci/opt/mu300/android/proc --exclude=openwrt-luci/opt/mu300/android/sys --exclude=openwrt-luci/opt/mu300/android/tmp --exclude=openwrt-luci/opt/mu300/android/run -czf - .mu300 boot openwrt-luci lost+found" > sd-filesystem.tar.gz'
 if ($LASTEXITCODE -ne 0) { throw '归档读取失败' }
 Get-Item .\sd-filesystem.tar.gz | Select-Object Name,Length
 Get-FileHash .\sd-filesystem.tar.gz -Algorithm SHA256

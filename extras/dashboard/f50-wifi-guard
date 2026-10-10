@@ -1,5 +1,18 @@
 #!/bin/sh
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+# Track bounded children so service stop also releases their locks/groups.
+child=''
+cleanup() {
+ trap '' TERM INT
+ if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null; wait "$child" 2>/dev/null || true; fi
+}
+trap cleanup EXIT
+trap 'exit 143' TERM INT
+bounded() {
+ /usr/libexec/f50-bounded "$@" & child=$!
+ wait "$child"; rc=$?; child=''
+ return "$rc"
+}
 bad=0; last=0; pending_since=0
 sleep 120
 while :; do
@@ -11,11 +24,11 @@ while :; do
  elif uci changes wireless | grep -q .; then
   bad=0; pending_since=0
  else
-  pending=$(/usr/libexec/f50-bounded 5 ubus call network.wireless status 2>/dev/null | jsonfilter -e '@.radio0.pending')
+  pending=$(bounded 5 ubus call network.wireless status 2>/dev/null | jsonfilter -e '@.radio0.pending')
   if [ "$pending" = true ]; then [ "$pending_since" != 0 ] || pending_since=$now; else pending_since=0; fi
-  status=$(/usr/libexec/f50-bounded 5 ubus call hostapd.wlan0 get_status 2>/dev/null | jsonfilter -e '@.status')
+  status=$(bounded 5 ubus call hostapd.wlan0 get_status 2>/dev/null | jsonfilter -e '@.status')
   carrier=0
-  /usr/libexec/f50-bounded 5 ip link show wlan0 2>/dev/null | grep -q LOWER_UP && carrier=1
+  bounded 5 ip link show wlan0 2>/dev/null | grep -q LOWER_UP && carrier=1
   age=0; [ "$pending_since" = 0 ] || age=$((now-pending_since))
   state=$(/usr/libexec/f50-wifi-evaluate "$status" "$carrier" "$pending" "$age")
   case "$state" in
@@ -26,15 +39,15 @@ while :; do
     mkdir -p /root/f50-wifi-diagnostics; chmod 700 /root/f50-wifi-diagnostics
     [ ! -f /root/f50-wifi-diagnostics/latest.txt ] || mv /root/f50-wifi-diagnostics/latest.txt /root/f50-wifi-diagnostics/previous.txt
     {
-     date; uptime; /usr/libexec/f50-bounded 5 ip link show wlan0
-     /usr/libexec/f50-bounded 5 iw dev
-     /usr/libexec/f50-bounded 5 iw reg get
-     /usr/libexec/f50-bounded 5 ubus call hostapd.wlan0 get_status
-     /usr/libexec/f50-bounded 5 logread | grep -E 'hostapd|netifd|wlan0|ACS|DFS|cfg80211|f50-wifi' | tail -n 100
+     date; uptime; bounded 5 ip link show wlan0
+     bounded 5 iw dev
+     bounded 5 iw reg get
+     bounded 5 ubus call hostapd.wlan0 get_status
+     bounded 5 logread | grep -E 'hostapd|netifd|wlan0|ACS|DFS|cfg80211|f50-wifi' | tail -n 100
     } > /root/f50-wifi-diagnostics/latest.txt 2>&1
     chmod 600 /root/f50-wifi-diagnostics/latest.txt
     logger -t f50-wifi-guard "AP unhealthy: pending=$pending age=$age carrier=$carrier; recovering Wi-Fi only"
-    /usr/libexec/f50-bounded 600 /usr/libexec/f50-wifi-start-safe
+    bounded 600 /usr/libexec/f50-wifi-start-safe
     last=$(cut -d. -f1 /proc/uptime); bad=0; pending_since=0
    fi;;
   esac

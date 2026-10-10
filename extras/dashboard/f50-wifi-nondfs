@@ -1,6 +1,6 @@
 #!/bin/sh
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
-allowed=$(timeout -k 2 5 iw phy phy0 info 2>/dev/null | awk '/MHz \[/{if ($0 !~ /disabled|radar detection|no IR/) {s=$0; sub(/^.*\[/,"",s); sub(/\].*$/,"",s); print s}}')
+allowed=$(/usr/libexec/f50-bounded 5 iw phy phy0 info 2>/dev/null | awk '/MHz \[/{if ($0 !~ /disabled|radar detection|no IR/) {s=$0; sub(/^.*\[/,"",s); sub(/\].*$/,"",s); print s}}')
 safe=''
 for block in '36 40 44 48' '149 153 157 161'; do
  valid=1

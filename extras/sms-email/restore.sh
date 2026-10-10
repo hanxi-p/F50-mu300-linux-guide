@@ -4,6 +4,7 @@ B=$(cd "$(dirname "$0")" && pwd)
 [ -f "$B/paths" ] || { echo 'Run the restore.sh copied to the installation backup directory'; exit 1; }
 [ ! -x /etc/init.d/f50-sms-email ] || { /etc/init.d/f50-sms-email stop; /etc/init.d/f50-sms-email disable; }
 while IFS= read -r p; do
+ [ "$p" != /usr/libexec/f50-bounded ] || continue
  if [ -e "$B$p" ]; then cp -p "$B$p" "$p"; else rm -f "$p"; fi
 done < "$B/paths"
 sync

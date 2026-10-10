@@ -64,8 +64,14 @@
       "directory": "extras/sms-email",
       "smtp": "implicit TLS / 465",
       "client": "msmtp 1.8.32",
-      "verification": "SMTP DATA verified: subject and exact hello body transmitted and accepted; real new-SMS recipient confirmation pending"
+      "verification": "SMTP DATA verified for subject and compact sender/text format; retry, reconciliation, deduplication, cancellation and service respawn fixtures passed; real new-SMS recipient confirmation pending"
     },
-    "dashboard_reliability": "2026-10-10 process cleanup, shared control worker, modem and collector flock"
+    "dashboard_reliability": "2026-10-10 tracked service children, clock-safe stale lock recovery, indefinite collector respawn and shared helper restore protection"
+  },
+  "system_components": {
+    "directory": "extras/system-reliability",
+    "base_rootfs": "v2026.10.11",
+    "upstream_commit": "52093b28c9c3e0280b1a1be6f0d4b5437a6053a1",
+    "scope": "Selected userspace, SMS, IPv6, USB and fw4 components; local boot/update mutex and process cleanup; no full rootfs or kernel upgrade"
   }
 }

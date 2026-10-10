@@ -1,0 +1,93 @@
+#!/bin/sh
+# Keep the SMS pool of the control panel (mu300-sms, /etc/mu300/sms-pool) in step with the SIM. openwrt-luci only.
+#
+# A new message is noticed by its +CMTI: mu300-atd appends every unsolicited line of the modem to
+# $ATDIR/urc/*.log, so a new "+CMTI:" changes the checksum of the +CMTI lines there, and that starts a sync. The
+# logs are emptied when they grow too large, which changes the checksum too: a sync is idempotent, so a spurious
+# one costs one AT+CMGL. A full sync also runs every MU300_SMS_SYNC_INTERVAL seconds, for an announcement that
+# was missed.
+#
+# Each sync moves what it pooled off the SIM (mu300-sms sync), so a full SIM never refuses the next message.
+#
+# Port of the fork's mu300-smsd (kanoqwq/clean-tf-7.2, cd4fb28), with the pool in /etc/mu300/sms-pool (D11).
+set -u
+export PATH="$PATH:/opt/mu300/bin:/opt/mu300/busybox-bin:/usr/sbin:/sbin"
+
+POOL=${MU300_SMS_POOL:-/etc/mu300/sms-pool}
+export MU300_SMS_POOL=$POOL
+ATDIR=${MU300_AT_DIR:-/run/mu300-at}
+URCDIR=$ATDIR/urc
+POLL=${MU300_SMS_POLL:-5}
+SYNC_INTERVAL=${MU300_SMS_SYNC_INTERVAL:-30}
+SMS=${MU300_SMS_BIN:-/opt/mu300/bin/mu300-sms}
+
+# One daemon: a second one (a service started twice) leaves the pool to a live first one, and takes the lock over
+# from one that died without letting go of it.
+LOCK=${MU300_SMS_LOCK:-/run/mu300-smsd.lock}
+# Only this daemon keeps the singleton descriptor; batches do not inherit it.
+exec 9>"$LOCK.flock"
+flock -n 9 || { echo "mu300-smsd: another daemon is active" >&2; exit 0; }
+batch=''; scratch=''
+release() {
+    trap '' TERM INT
+    if [ -n "$batch" ]; then kill -TERM "$batch" 2>/dev/null; wait "$batch" 2>/dev/null || true; fi
+    case "$scratch" in /tmp/f50-sms-batch.*) rm -rf "$scratch";; esac
+    flock -u 9 2>/dev/null || true
+    exec 9>&-
+}
+trap release EXIT
+trap 'exit 143' INT TERM
+
+# mu300-atd owns the AT channel; until its command fifo is there nothing can be asked
+n=0
+until [ -p "$ATDIR/cmd" ]; do
+    n=$((n + 1))
+    [ "$n" -gt 120 ] && { echo "mu300-smsd: no command fifo from mu300-atd after ten minutes, exiting" >&2; exit 1; }
+    sleep 5
+done
+
+# the SIM needs its time after a boot; a modem that never says READY still gets the periodic syncs below
+n=0
+until mu300-at -t 4 'AT+CPIN?' 2>/dev/null | grep -q READY; do
+    n=$((n + 1))
+    [ "$n" -gt 60 ] && { echo "mu300-smsd: the SIM never became ready, syncing anyway" >&2; break; }
+    sleep 10
+done
+# Without CNMI the modem stores a new message silently and no +CMTI ever comes: ask for the storage indications.
+# A refusal still leaves the periodic sync.
+mu300-at -t 4 'AT+CNMI=2,1,0,0,0' >/dev/null 2>&1 || true
+# Bound a whole batch, and remove its scratch directory after cancellation.
+sync_batch() {
+    scratch=$(mktemp -d /tmp/f50-sms-batch.XXXXXX) || return 1
+    TMPDIR="$scratch" /usr/libexec/f50-bounded 300 "$SMS" sync 9>&- & batch=$!
+    wait "$batch"; rc=$?; batch=''
+    case "$scratch" in /tmp/f50-sms-batch.*) rm -rf "$scratch" ;; esac
+    scratch=''
+    return "$rc"
+}
+sync_batch || echo "mu300-smsd: the first sync failed, retrying later" >&2
+
+# md5sum first: OpenWrt's busybox has no cksum
+signature() {
+    cat "$URCDIR"/*nr*.log 2>/dev/null | grep -aF '+CMTI' | { md5sum 2>/dev/null || cksum; }
+}
+
+last=$(signature)
+elapsed=0
+echo "mu300-smsd: pooling into $POOL (a look every ${POLL} s, a full sync every ${SYNC_INTERVAL} s)" >&2
+while :; do
+    sleep "$POLL"
+    s=$(signature)
+    if [ "$s" != "$last" ]; then
+        last=$s
+        sleep 2   # let the message land in the storage before listing it
+        sync_batch || echo "mu300-smsd: sync failed, retrying on the next trigger" >&2
+        elapsed=0
+        continue
+    fi
+    elapsed=$((elapsed + POLL))
+    if [ "$elapsed" -ge "$SYNC_INTERVAL" ]; then
+        elapsed=0
+        sync_batch >/dev/null || true
+    fi
+done

@@ -146,7 +146,7 @@ ubus call network.interface.wan status
 
 执行 [第 5 章](05-network-and-management.md)、[第 7 章](07-backup-and-restore.md) 与 [核对表](09-checklist.md)。
 
-安装完成后，按 [安装后优化](10a-post-install-optimization.md) 集中设置密码、SSH 密钥、后台、无线与 DHCP，保存 balanced 动态调频和开机应用，整理时间、软件源、流量管理入口及最终备份。已安装 OpenWrt 的设备直接从管理与优化阶段续接。
+安装完成后，按 [安装后优化](10a-post-install-optimization.md) 先完成固定版本的系统组件修补与验收，再集中设置密码、SSH 密钥、后台、无线与 DHCP，保存 balanced 动态调频和开机应用，整理时间、软件源、流量管理入口及最终备份。已安装 OpenWrt 的设备直接从管理与优化阶段续接。
 
 Wi-Fi 名称、管理端口、时间、软件源与系统更新的日常配置见 [扫尾配置](05b-daily-management.md)，依据用户需求设置；Wi-Fi 地区、总流量 / 月流量统计与调优由 Q&A 进入。
 

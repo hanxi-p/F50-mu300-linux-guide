@@ -10,6 +10,7 @@ done
 /etc/init.d/vnstat stop
 [ ! -x /etc/init.d/f50power ] || /etc/init.d/f50power disable
 while IFS= read -r path; do
+ [ "$path" != /usr/libexec/f50-bounded ] || continue
  if [ -e "$backup$path" ]; then mkdir -p "$(dirname "$path")"; cp -p "$backup$path" "$path";
  else rm -f "$path"; fi
 done < "$backup/paths"
@@ -18,7 +19,7 @@ if [ "$(cat "$backup/vnstat.running")" = 1 ]; then /etc/init.d/vnstat start; fi
 if [ -x /etc/init.d/f50power ]; then
  if [ "$(cat "$backup/f50power.enabled" 2>/dev/null || echo 0)" = 1 ]; then /etc/init.d/f50power enable; fi
  mode=$(uci -q get f50dashboard.power.mode || echo performance)
- mkdir /tmp/f50power.lock 2>/dev/null && /usr/libexec/f50power-worker "$mode" || true
+ /usr/libexec/f50-run-worker power "$mode" || true
 else
  for n in 0 1 2 3 4 5 6 7; do [ ! -e /sys/devices/system/cpu/cpu$n/online ] || echo 1 > /sys/devices/system/cpu/cpu$n/online; done
  /opt/mu300/bin/mu300-toolkit profile balanced >/dev/null
