@@ -151,6 +151,9 @@ uci set luci.sauth.sessiontime=7200
 uci commit luci
 uci set unisoc_modem.main.home_refresh_interval=2
 uci commit unisoc_modem
+chmod 755 /usr/libexec/f50-lock
+# Remove retired dashboard extension when upgrading.
+rm -f /www/luci-static/resources/f50highrail.js /usr/libexec/rpcd/f50highrail /usr/libexec/f50highrail-worker /usr/libexec/f50highrail-run /usr/share/rpcd/acl.d/luci-app-f50highrail.json
 /etc/init.d/rpcd restart
 /etc/init.d/f50history enable
 /etc/init.d/f50history start
@@ -160,7 +163,3 @@ ubus call f50power status >/dev/null
 ubus call f50quota status >/dev/null
 ubus call f50channel status >/dev/null
 ubus call f50openclash status >/dev/null
-
-chmod 755 /usr/libexec/f50-lock
-# Remove retired dashboard extension when upgrading.
-rm -f /www/luci-static/resources/f50highrail.js /usr/libexec/rpcd/f50highrail /usr/libexec/f50highrail-worker /usr/libexec/f50highrail-run /usr/share/rpcd/acl.d/luci-app-f50highrail.json
