@@ -43,7 +43,7 @@
 
 ## 安装后优化
 
-安装后优化的逐项清单见 [密码、SSH、后台、性能、管理与备份](12-post-install-optimization.md)。
+安装后优化的逐项清单见 [密码、SSH、后台、性能、管理与备份](10a-post-install-optimization.md)。
 
 ## 可选扩展（按用户需求）
 

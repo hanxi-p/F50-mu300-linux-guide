@@ -1,13 +1,15 @@
 #!/bin/sh
 set -eu
-[ -x /etc/init.d/adguardhome ] && [ -r /etc/f50openclash-adguard.netrc ] || { echo 'è¯·å…ˆæŒ‰æ–‡æ¡£é…ç½® AdGuard Home æœåŠ¡ä¸Žæœ¬æœº API å‡­æ®' > /tmp/f50adguard-error; rmdir /tmp/f50adguard.lock /tmp/f50dns-switch.lock 2>/dev/null || true; exit 1; }
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
 LOCK=/tmp/f50adguard.lock
-echo $$ > "$LOCK/pid"
-trap 'rm -f "$LOCK/pid" "$LOCK/target"; rmdir "$LOCK" /tmp/f50dns-switch.lock 2>/dev/null || true' EXIT
+trap '/usr/libexec/f50-lock release "$LOCK" $$; /usr/libexec/f50-lock release /tmp/f50dns-switch.lock $$' EXIT
+/usr/libexec/f50-lock adopt "$LOCK" $$ || exit 1
+/usr/libexec/f50-lock adopt /tmp/f50dns-switch.lock $$ || exit 1
+trap 'exit 1' INT TERM
 case "$1" in
-1) /etc/init.d/adguardhome enable; /etc/init.d/adguardhome start
- n=0; until pidof AdGuardHome >/dev/null; do n=$((n+1)); [ "$n" -lt 15 ] || { echo 'AdGuard Home å¯åŠ¨å¤±è´¥' > /tmp/f50adguard-error; exit 1; }; sleep 1; done
+1) /etc/init.d/adguardhome enable; /usr/libexec/f50-bounded 45 /etc/init.d/adguardhome start
+ n=0; until pidof AdGuardHome >/dev/null; do n=$((n+1)); [ "$n" -lt 15 ] || { echo 'AdGuard Home Æô¶¯Ê§°Ü' > /tmp/f50adguard-error; exit 1; }; sleep 1; done
  sleep 2;;
-0) /usr/libexec/f50-dns-route auto off; /etc/init.d/adguardhome disable; /etc/init.d/adguardhome stop;;
+0) /usr/libexec/f50-dns-route auto off; /etc/init.d/adguardhome disable; /usr/libexec/f50-bounded 45 /etc/init.d/adguardhome stop;;
 esac
-if [ "$1" = 0 ]; then /usr/libexec/f50-dns-route auto off; else /usr/libexec/f50-dns-route auto; fi || { echo 'DNS è”åŠ¨å¤±è´¥ï¼Œè¯·æ£€æŸ¥æœåŠ¡' > /tmp/f50adguard-error; exit 1; }
+if [ "$1" = 0 ]; then /usr/libexec/f50-dns-route auto off; else /usr/libexec/f50-dns-route auto; fi || { echo 'DNS Áª¶¯Ê§°Ü£¬Çë¼ì²é·þÎñ' > /tmp/f50adguard-error; exit 1; }

@@ -181,7 +181,7 @@ iw reg get
 iw phy phy0 info
 ```
 
-核对 UCI 已保存国家代码，以及驱动实际显示的可用频段 / 信道。国家代码用于匹配使用地的信道与功率规则，实际效果取决于驱动与固件能力；不以随意换地区作为增大发射功率的默认优化。无线名称 / 密码见 [扫尾配置](11-daily-management.md#2-wi-fi-名称与密码)。
+核对 UCI 已保存国家代码，以及驱动实际显示的可用频段 / 信道。国家代码用于匹配使用地的信道与功率规则，实际效果取决于驱动与固件能力；不以随意换地区作为增大发射功率的默认优化。无线名称 / 密码见 [扫尾配置](05b-daily-management.md#2-wi-fi-名称与密码)。
 
 <a id="persistent-traffic"></a>
 
@@ -309,3 +309,7 @@ vnstat -i sipa_eth0 -m
 vnStat 2.13 的自动检测模式存在 Linux 下误判 32 位计数器的已知问题；接口重置时可能被当成回卷，增加 `2^32` 字节。先备份配置和数据库，再将 `/etc/vnstat.conf` 的 `64bitInterfaceCounters` 设为 `1`，重启 vnstat。配套安装器已使用该设置。此设置预防继续误计，不会自动改写此前历史；不要在没有校准依据时清空数据库或直接扣除历史流量。
 
 本机记录出现两次回卷量级，已保留原数据库并应用 64 位处理。参考 [vnStat 上游 CHANGES](https://github.com/vergoh/vnstat/blob/master/CHANGES)和 [配置手册](https://humdi.net/vnstat/man/2.11/vnstat.conf.html)。
+
+## 短信转发到邮件
+
+准备、配套文件、hello 测试和邮件故障排查见 [第十二章：其他可选功能](12-optional-features.md#2-短信转发到邮件)。

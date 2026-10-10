@@ -295,17 +295,20 @@ sfun_restart_locked() {
 # one apply at a time: overlapping SFUN dances (band lock + cell unlock + mode in
 # quick succession) leave the radio off. A second apply waits for the running one.
 apply_lock() {
-    local d=$APPLY_DIR pid n=0
-    while ! mkdir "$d" 2>/dev/null; do
-        pid=$(cat "$d/pid" 2>/dev/null)
-        if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
-            n=$((n + 1)); [ "$n" -gt 90 ] && { say "another lock apply is still running"; exit 1; }
-            sleep 2
-            continue
-        fi
-        rm -rf "$d"
+    local n=0
+    exec 9>"$APPLY_DIR.flock" || exit 1
+    until flock -n 9; do
+        n=$((n+1)); [ "$n" -le 90 ] || { say "another lock apply is still running"; exit 1; }
+        sleep 2
     done
-    echo $$ > "$d/pid"
+    mkdir -p "$APPLY_DIR" || exit 1
+    echo $$ > "$APPLY_DIR/pid"
+}
+apply_unlock() {
+    rm -f "$APPLY_DIR/pid"
+    rmdir "$APPLY_DIR" 2>/dev/null || true
+    flock -u 9
+    exec 9>&-
 }
 
 save_state() {  # save_state KEY VALUE - one small file per key, so applies never
@@ -366,7 +369,8 @@ do_apply() {  # do_apply KIND VALUE
         return 0
     fi
     apply_lock
-    trap 'rm -rf "$APPLY_DIR" 2>/dev/null' EXIT INT TERM
+    trap apply_unlock EXIT
+    trap 'exit 143' INT TERM
     kind=$1; val=$2
     case $kind in
         mode)
@@ -390,7 +394,7 @@ do_apply() {  # do_apply KIND VALUE
             # seven-command fresh read follows in the background as before.
             [ -s "$LOCKCACHE" ] &&
                 sed -i "s/\"endc\":\"[0-9]\"/\"endc\":\"$([ "$val" = on ] && echo 1 || echo 0)\"/" "$LOCKCACHE" 2>/dev/null
-            setsid "$0" get fresh >/dev/null 2>&1 &
+            setsid "$0" get fresh 9>&- >/dev/null 2>&1 &
             return 0   # takes effect without an SFUN restart
             ;;
         lte)
@@ -482,7 +486,7 @@ do_apply() {  # do_apply KIND VALUE
         sh "$0" get fresh >/dev/null 2>&1
         grep -q '"cells"' "$LOCKCACHE" 2>/dev/null && grep -qE '"(nr|lte)":\{"locked":"[0-9]' "$LOCKCACHE" 2>/dev/null && break
         n=$((n + 1)); sleep 3
-      done ) >/dev/null 2>&1 &
+      done ) 9>&- >/dev/null 2>&1 &
 }
 
 # ----------------------------------------------------------------- replay
@@ -557,7 +561,8 @@ do_replay() {
         return 0
     fi
     apply_lock
-    trap 'rm -rf "$APPLY_DIR" 2>/dev/null' EXIT INT TERM
+    trap apply_unlock EXIT
+    trap 'exit 143' INT TERM
     # Another caller may have completed replay while this one waited for the lock.
     [ -e "$marker" ] && return 0
     # boot hook: the AT settings do not all survive a modem power cycle, so re-send
@@ -643,7 +648,7 @@ case "${1:-}" in
             do_get >/dev/null
         else
             age=$(( $(date +%s) - $(date -r "$LOCKCACHE" +%s 2>/dev/null || echo 0) ))
-            [ "$age" -gt 600 ] && setsid "$0" get fresh >/dev/null 2>&1 &
+            [ "$age" -gt 600 ] && setsid "$0" get fresh 9>&- >/dev/null 2>&1 &
         fi
         emit_state
         ;;

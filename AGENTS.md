@@ -5,7 +5,7 @@
 ## 任务优先级
 
 1. 核心交付：本机备份、配套 B09、Bootloader 解锁、Magisk Root、SD 原生 OpenWrt、管理连接和系统切换。
-2. 安装后优化：按 `docs/12-post-install-optimization.md` 处理密码、管理地址、电脑 SSH 密钥、后台与无线、动态调频、日常管理和最终备份；电脑互联网走主路由网线。
+2. 安装后优化：按 `docs/10a-post-install-optimization.md` 处理密码、管理地址、电脑 SSH 密钥、后台与无线、动态调频、日常管理和最终备份；电脑互联网走主路由网线。
 3. 扩展：OpenClash、用户自己的配置、IPv6 LAN 场景、换卡。按用户需求处理，扩展配置缺失不阻塞核心安装交付。
 
 ## 执行依据

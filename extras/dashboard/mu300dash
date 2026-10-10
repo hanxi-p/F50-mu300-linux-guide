@@ -131,6 +131,12 @@ fast_busy() {
 }
 age_of() { [ -s "$1" ] && echo $(( $(now) - $(date -r "$1" +%s 2>/dev/null || echo 0) )) || echo -1; }
 
+# Kernel lock is authoritative; a stale directory must not freeze collectors.
+lock_applying() {
+    flock -n /run/unisoc-modem-lock-apply.flock true >/dev/null 2>&1 && return 1
+    return 0
+}
+
 m_status() {
     local info cage sage busy=0 fbusy=0
     info=$(json_obj "$("$DASH/dashboard-info" 2>/dev/null)") || info='{"error":"Dashboard info failed"}'
@@ -140,16 +146,16 @@ m_status() {
     # a full round in flight also writes the fast cache, so it counts for both.
     # During a lock apply (SFUN restart) do not kick anything: the modem answers
     # garbage mid-restart and the collectors would only burn the AT channel.
-    if [ -d /run/unisoc-modem-lock-apply ]; then busy=1; fbusy=1; fi
+    if lock_applying; then busy=1; fbusy=1; fi
     if collecting; then busy=1; fbusy=1; fi
     fast_busy && fbusy=1
     # A full round also refreshes sig.json. Prefer it when both tiers are stale;
     # starting full and fast together doubles the AT burst for no benefit.
     if { [ "$cage" -lt 0 ] || [ "$cage" -gt "$TTL" ]; } && [ "$busy" = 0 ]; then
-        setsid "$DASH/cell" >/dev/null 2>&1 &
+        setsid /usr/libexec/f50-bounded 90 "$DASH/cell" >/dev/null 2>&1 &
         busy=1; fbusy=1
     elif { [ "$sage" -lt 0 ] || [ "$sage" -gt "$TTL_FAST" ]; } && [ "$fbusy" = 0 ]; then
-        setsid "$DASH/cell" fast >/dev/null 2>&1 &
+        setsid /usr/libexec/f50-bounded 30 "$DASH/cell" fast >/dev/null 2>&1 &
         fbusy=1
     fi
     printf '{"info":%s,"cell":%s,"sig":%s,"cell_age":%d,"sig_age":%d,"refreshing":%d}\n' \
@@ -166,7 +172,7 @@ m_signal() {
     # that window return garbage or wedge, and rpcd died with a userspace
     # segfault (sessions wiped -> LuCI login loop) on at least one live
     # read's output. Serve the last snapshot until the apply finishes.
-    if [ -d /run/unisoc-modem-lock-apply ]; then
+    if lock_applying; then
         json_obj "$(cat "$SIGF" 2>/dev/null)" ||
             printf '{"error":"Applying network locks: no live signal right now"}\n'
         return
@@ -177,7 +183,7 @@ m_signal() {
     # unbounded parallel work. The collector claims one of the verified
     # slot-0 nr6/nr7 channels and drops excess overlap immediately.
     MU300_DASH_DIR="$live" MU300_DASH_LOCK_DIR="$DIR" \
-        "$DASH/cell" fast >/dev/null 2>&1
+        /usr/libexec/f50-bounded 30 "$DASH/cell" fast >/dev/null 2>&1
     json_obj "$(cat "$live/sig.json" 2>/dev/null)" ||
         printf '{"error":"Live signal read failed"}\n'
     rm -rf "$live"
@@ -255,7 +261,7 @@ m_at() {
     fi
     # a lock apply in flight means the modem is restarting (SFUN) - say so instead
     # of a generic busy, so it does not look like the console died
-    if [ -d /run/unisoc-modem-lock-apply ]; then
+    if lock_applying; then
         printf '{"ok":0,"busy":1,"error":"Applying network locks: the modem is restarting (about half a minute), try again shortly"}\n'
         return
     fi
@@ -296,7 +302,7 @@ m_lock_get() {
     fi
     if json_obj "$out" >/dev/null; then
         local applying=0 reg=0 act=0 cell_ts=0 data_up=0
-        [ -d /run/unisoc-modem-lock-apply ] && applying=1
+        lock_applying && applying=1
         reg=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.reg.stat' 2>/dev/null)
         act=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.reg.act' 2>/dev/null)
         cell_ts=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.ts' 2>/dev/null)
@@ -336,8 +342,8 @@ m_lock_set() {
     # cellular - exactly the thing that must never run inside a request
     # queued=1 tells the page another apply is still running (SFUN restart);
     # the new one waits for the modem and the page can say so
-    [ -d /run/unisoc-modem-lock-apply ] && q=1
-    setsid "$DASH/lock" apply "$kind" "$val" >/dev/null 2>&1 &
+    lock_applying && q=1
+    setsid /usr/libexec/f50-bounded 360 "$DASH/lock" apply "$kind" "$val" >/dev/null 2>&1 &
     printf '{"ok":1,"started":1,"queued":%d,"op":%s}\n' "$q" "$(json_str "lock $kind=$val")"
 }
 

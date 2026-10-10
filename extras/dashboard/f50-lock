@@ -31,11 +31,15 @@ write_owner() {
 }
 case "$action" in
 sweep) sweep;;
-acquire) sweep; mkdir "$d" 2>/dev/null || exit 1; write_owner || { rmdir "$d" 2>/dev/null; exit 1; };;
+acquire) sweep; mkdir "$d" 2>/dev/null || exit 1; write_owner || { rm -f "$d/owner.new" "$d/owner" "$d/pid"; rmdir "$d" 2>/dev/null; exit 1; };;
 adopt) [ -d "$d" ] || exit 1; write_owner;;
 release)
  p=$(cat "$d/pid" 2>/dev/null)
  [ "$p" = "$owner" ] || exit 0
+ if [ -r "$d/owner" ]; then
+  read -r p t born < "$d/owner"
+  [ "$p" = "$owner" ] && [ "$t" = "$(ticks "$owner")" ] || exit 0
+ fi
  rm -f "$d/owner" "$d/pid" "$d/target"
  rmdir "$d" 2>/dev/null || true;;
 *) exit 2;;

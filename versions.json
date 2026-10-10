@@ -1,5 +1,5 @@
 {
-  "guide_date": "2026-10-07",
+  "guide_date": "2026-10-10",
   "tested_device": "ZTE F50 / MU300, original B15 slot b, retained B09 slot a",
   "upstream": {
     "repo": "https://github.com/dikeckaan/mu300-linux",
@@ -58,5 +58,14 @@
       "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.29/mihomo-linux-arm64-v1.19.29.gz"
     }
   ],
-  "publication": "Documentation and public asset hashes only. Private device data and binaries excluded."
+  "publication": "Documentation and public asset hashes only. Private device data and binaries excluded.",
+  "optional_features": {
+    "sms_email": {
+      "directory": "extras/sms-email",
+      "smtp": "implicit TLS / 465",
+      "client": "msmtp 1.8.32",
+      "verification": "SMTP hello accepted; service enabled; public queue fixture passed; real new-SMS recipient confirmation pending"
+    },
+    "dashboard_reliability": "2026-10-10 process cleanup, shared control worker, modem and collector flock"
+  }
 }

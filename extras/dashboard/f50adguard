@@ -1,19 +1,10 @@
 #!/bin/sh
 . /usr/share/libubox/jshn.sh
-export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
 LOCK=/tmp/f50adguard.lock
-cleanup_switch_locks() {
- for d in /tmp/f50adguard.lock /tmp/f50openclash.lock; do
-  [ -d "$d" ] || continue
-  p=$(cat "$d/pid" 2>/dev/null)
-  if [ -n "$p" ] && ! kill -0 "$p" 2>/dev/null; then rm -f "$d/pid" "$d/target"; rmdir "$d" 2>/dev/null || true; fi
- done
- if [ -d /tmp/f50dns-switch.lock ] && [ ! -d /tmp/f50adguard.lock ] && [ ! -d /tmp/f50openclash.lock ]; then
-  stale=$(find /tmp/f50dns-switch.lock -maxdepth 0 -mmin +1 2>/dev/null)
-  [ -z "$stale" ] || rmdir /tmp/f50dns-switch.lock 2>/dev/null || true
- fi
-}
-cleanup_switch_locks
+for d in /tmp/f50adguard.lock /tmp/f50openclash.lock /tmp/f50dns-switch.lock; do
+ /usr/libexec/f50-lock sweep "$d"
+done
 case "$1" in
 list) echo '{"status":{},"set_enabled":{"enabled":"Boolean"}}';;
 call)
@@ -22,10 +13,7 @@ call)
     json_init
     if pidof AdGuardHome >/dev/null; then json_add_boolean running 1; else json_add_boolean running 0; fi
     if /etc/init.d/adguardhome enabled; then json_add_boolean enabled 1; else json_add_boolean enabled 0; fi
-    if [ -d "$LOCK" ]; then
-        pid=$(cat "$LOCK/pid" 2>/dev/null)
-        if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then rm -f "$LOCK/pid" "$LOCK/target"; rmdir "$LOCK" 2>/dev/null; fi
-    fi
+    /usr/libexec/f50-lock sweep "$LOCK"
     if [ -d /tmp/f50dns-switch.lock ] || [ -d "$LOCK" ]; then json_add_boolean busy 1; else json_add_boolean busy 0; fi
     json_add_string target "$(cat "$LOCK/target" 2>/dev/null)"
     json_add_string error "$(cat /tmp/f50adguard-error 2>/dev/null)"
@@ -34,11 +22,11 @@ call)
     json_load "$(cat)" || exit 1
     json_get_var enabled enabled
     case "$enabled" in 0|1) ;; *) exit 1;; esac
-    if ! mkdir /tmp/f50dns-switch.lock 2>/dev/null; then json_init; json_add_boolean ok 0; json_add_string error "DNS 服务正在切换，请稍候"; json_dump; exit; fi
-    if ! mkdir "$LOCK" 2>/dev/null; then rmdir /tmp/f50dns-switch.lock; json_init; json_add_boolean ok 0; json_add_string error '正在切换，请稍候'; json_dump; exit; fi
+    if ! /usr/libexec/f50-lock acquire /tmp/f50dns-switch.lock $$; then json_init; json_add_boolean ok 0; json_add_string error "DNS 服务正在切换，请稍候"; json_dump; exit; fi
+    if ! /usr/libexec/f50-lock acquire "$LOCK" $$; then /usr/libexec/f50-lock release /tmp/f50dns-switch.lock $$; json_init; json_add_boolean ok 0; json_add_string error '正在切换，请稍候'; json_dump; exit; fi
     printf '%s' "$enabled" > "$LOCK/target"
     rm -f /tmp/f50adguard-error
-    /usr/bin/setsid /usr/libexec/f50adguard-worker "$enabled" </dev/null >/tmp/f50adguard-control.log 2>&1 &
+    /usr/bin/setsid /usr/libexec/f50-run-worker adguard "$enabled" claimed </dev/null >/tmp/f50adguard-control.log 2>&1 &
     json_init; json_add_boolean ok 1; json_dump;;
  esac;;
 esac

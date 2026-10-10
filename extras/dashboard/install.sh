@@ -26,6 +26,8 @@ done
 cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/f50powerradio25.js
 /usr/libexec/f50-lock
+/usr/libexec/f50-run-worker
+/usr/libexec/unisoc-modem/cell
 /www/luci-static/resources/view/mu300/home.js
 /usr/libexec/unisoc-modem/lock
 /usr/libexec/rpcd/mu300dash
@@ -119,6 +121,8 @@ f50-dns-guard-init /etc/init.d/f50-dns-guard
 f50channel.js /www/luci-static/resources/f50channelstate.js
 f50power.js /www/luci-static/resources/f50powerradio25.js
 f50-lock /usr/libexec/f50-lock
+f50-run-worker /usr/libexec/f50-run-worker
+cell /usr/libexec/unisoc-modem/cell
 modem-lock /usr/libexec/unisoc-modem/lock
 mu300dash /usr/libexec/rpcd/mu300dash
 home.js /www/luci-static/resources/view/mu300/home.js
@@ -153,7 +157,7 @@ luci-app-f50adguard.json /usr/share/rpcd/acl.d/luci-app-f50adguard.json
 f50-wifi-nondfs /usr/libexec/f50-wifi-nondfs
 f50-wifi-start-safe /usr/libexec/f50-wifi-start-safe
 FILES
-chmod 755 /usr/libexec/unisoc-modem/lock /usr/libexec/rpcd/mu300dash
+chmod 755 /usr/libexec/unisoc-modem/lock /usr/libexec/unisoc-modem/cell /usr/libexec/f50-run-worker /usr/libexec/rpcd/mu300dash
 chmod 755 /usr/libexec/f50-wifi-nondfs /usr/libexec/f50-wifi-start-safe
 chmod 755 /usr/libexec/f50-bounded /usr/libexec/f50-wifi-guard /usr/libexec/f50-wifi-evaluate /etc/init.d/f50-wifi-guard /usr/libexec/f50-dns-guard /usr/libexec/f50-dns-health /etc/init.d/f50-dns-guard /usr/libexec/f50-lock
 sh apply-reliability.sh

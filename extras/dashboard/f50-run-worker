@@ -1,0 +1,21 @@
+#!/bin/sh
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+kind=$1; target=$2
+case "$kind" in adguard|openclash|power) ;; *) exit 2;; esac
+worker=/usr/libexec/f50${kind}-worker
+if [ "${3:-}" != claimed ]; then
+ if [ "$kind" != power ]; then /usr/libexec/f50-lock acquire /tmp/f50dns-switch.lock $$ || exit 1; fi
+ if ! /usr/libexec/f50-lock acquire "/tmp/f50${kind}.lock" $$; then
+  [ "$kind" = power ] || /usr/libexec/f50-lock release /tmp/f50dns-switch.lock $$
+  exit 1
+ fi
+fi
+/usr/libexec/f50-bounded 150 "$worker" "$target"
+code=$?
+if [ "$code" != 0 ]; then
+ [ -s "/tmp/f50${kind}-error" ] || echo '切换失败或超时，请检查日志；DNS 守护会检查解析链路' > "/tmp/f50${kind}-error"
+ logger -t f50-control "$kind worker returned $code"
+fi
+/usr/libexec/f50-lock sweep "/tmp/f50${kind}.lock"
+/usr/libexec/f50-lock sweep /tmp/f50dns-switch.lock
+exit "$code"
