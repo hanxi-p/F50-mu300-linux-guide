@@ -32,7 +32,7 @@
 
 新短信保存到本地短信池后，hook 生成 UTF-8 邮件并放入 SD 持久队列。发送服务每 10 秒检查待发邮件，单次发送最多 45 秒；失败保留邮件，60 秒后重试。成功提交后记录短信 ID，避免同一 ID 重复入队。
 
-发送只处理**启用后进入短信池的新短信**，不会自动补发旧短信。邮件主题固定为“来自F50新信息”，正文第一行显示短信发送号码，空一行后原样保留短信内容。服务不修改 OpenClash、AdGuard Home、无线或蜂窝配置。
+发送只处理**启用后进入短信池的新短信**，不会自动补发旧短信。邮件主题固定为“来自F50新信息”，正文第一行显示“发送号码：号码”，空一行后显示“短信原文：”并接上完整短信内容。服务不修改 OpenClash、AdGuard Home、无线或蜂窝配置。
 
 配套文件：[安装与恢复说明](../extras/sms-email/README.md)、[安装器](../extras/sms-email/install.sh)、[入队 hook](../extras/sms-email/enqueue.sh)、[发送服务](../extras/sms-email/worker.sh)、[hello 测试](../extras/sms-email/test.sh)。
 

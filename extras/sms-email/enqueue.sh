@@ -19,7 +19,7 @@ subject=$(printf '%s' '来自F50新信息' | /opt/mu300/bin/busybox base64 | tr 
  printf 'Date: %s\r\n' "$(date -R)"
  printf 'Message-ID: <f50-sms-%s-%s@163.com>\r\n' "$id" "$(date +%s)"
  printf 'MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'
- printf '发送号码：%s\n\n%s' "${SMS_FROM:-未知}" "${SMS_TEXT:-}" | /opt/mu300/bin/busybox base64 | sed 's/$/\r/'
+ printf '发送号码：%s\n\n短信原文：%s' "${SMS_FROM:-未知}" "${SMS_TEXT:-}" | /opt/mu300/bin/busybox base64 | sed 's/$/\r/'
 } > "$temp"
 chmod 600 "$temp"
 mv "$temp" "$D/outbox/$id.eml"
