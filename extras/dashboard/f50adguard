@@ -27,6 +27,9 @@ call)
     printf '%s' "$enabled" > "$LOCK/target"
     rm -f /tmp/f50adguard-error
     /usr/bin/setsid /usr/libexec/f50-run-worker adguard "$enabled" claimed </dev/null >/tmp/f50adguard-control.log 2>&1 &
+    child=$!
+    /usr/libexec/f50-lock handoff /tmp/f50dns-switch.lock "$child" $$ || true
+    /usr/libexec/f50-lock handoff "$LOCK" "$child" $$ || true
     json_init; json_add_boolean ok 1; json_dump;;
  esac;;
 esac

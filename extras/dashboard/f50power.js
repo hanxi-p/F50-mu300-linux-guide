@@ -7,7 +7,7 @@ var get=rpc.declare({object:'f50power',method:'status'});
 var set=rpc.declare({object:'f50power',method:'set',params:['mode']});
 var radioGet=rpc.declare({object:'mu300dash',method:'lock_get',nobatch:true,expect:{'':{}}});
 var radioSet=rpc.declare({object:'mu300dash',method:'lock_set',params:['kind','val'],nobatch:true,expect:{'':{}}});
-var SWITCH_ESTIMATE_S={ '4g':25, auto:25 };
+var SWITCH_ESTIMATE_S={ '4g':30, auto:30 };
 return baseclass.extend({mount:function(root){
  var btn=root.querySelector('#mud-btn-power'),nr=root.querySelector('#mud-btn-5g'),timer,radioTimer,disposed=false,waiting=false,deadline=0,targetMode='auto',lastError='',startedAt=0,startedCellTs=0,lastCellTs=0,accepted=false,checking=false,applied=false,powerTarget=null;
  nr.style.display='flex';nr.style.flexDirection='column';nr.style.alignItems='center';nr.style.justifyContent='center';nr.style.gap='2px';
@@ -17,7 +17,7 @@ return baseclass.extend({mount:function(root){
   var hint='';
   if(waiting){var left=Math.max(0,Math.ceil((deadline-Date.now())/1000));hint=left?'还需'+left+'秒':applied?'正在恢复网络…':'正在确认切换…';}
   if(waiting)nr.appendChild(E('small',{style:'display:block;font-size:10px;line-height:1.3;opacity:.85'},hint));
-  nr.title='点击立即切换，预计需 25 秒；联网恢复后自动结束';
+  nr.title='点击立即切换，预计需 30 秒；联网恢复后自动结束';
  }
 
  function stop(){waiting=false;clearTimeout(radioTimer);radioTimer=null;paint();}
@@ -26,6 +26,7 @@ return baseclass.extend({mount:function(root){
   var label=s.mode && s.mode.label;lastCellTs=Number(s.cell_ts)||0;
   nr.dataset.mode=label || 'auto';nr.setAttribute('aria-pressed',label==='4g'?'false':'true');
   if(waiting && accepted){
+   if(!s.applying && s.apply_error){stop();ui.addNotification(null,E('p',{},s.apply_error));return;}
    applied=!s.applying && label===targetMode && Number(s.ts)>0;
    var registered=Number(s.registration)===1 || Number(s.registration)===5;
    var correctRat=targetMode==='auto' || Number(s.access)===7 || Number(s.access)===10;

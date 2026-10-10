@@ -301,7 +301,8 @@ m_lock_get() {
         out=$("$DASH/lock" get 2>/dev/null)
     fi
     if json_obj "$out" >/dev/null; then
-        local applying=0 reg=0 act=0 cell_ts=0 data_up=0
+        local applying=0 reg=0 act=0 cell_ts=0 data_up=0 apply_error
+        apply_error=$(cat "$DIR/lock-apply.error" 2>/dev/null)
         lock_applying && applying=1
         reg=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.reg.stat' 2>/dev/null)
         act=$(jsonfilter -i /var/run/unisoc-modem/sig.json -e '@.reg.act' 2>/dev/null)
@@ -310,7 +311,8 @@ m_lock_get() {
         case "$reg" in ''|*[!0-9]*) reg=0;; esac
         case "$act" in ''|*[!0-9]*) act=0;; esac
         case "$cell_ts" in ''|*[!0-9]*) cell_ts=0;; esac
-        printf '%s\n' "$out" | sed "s/^{/{\"applying\":$applying,\"registration\":$reg,\"access\":$act,\"cell_ts\":$cell_ts,\"data_up\":$data_up,/"
+        printf '{"apply_error":%s,"applying":%s,"registration":%s,"access":%s,"cell_ts":%s,"data_up":%s,' "$(json_str "$apply_error")" "$applying" "$reg" "$act" "$cell_ts" "$data_up"
+        printf '%s\n' "$out" | sed '1s/^{//'
     else
         printf '{"error":"Lock read failed"}\n'
     fi
@@ -343,7 +345,8 @@ m_lock_set() {
     # queued=1 tells the page another apply is still running (SFUN restart);
     # the new one waits for the modem and the page can say so
     lock_applying && q=1
-    setsid /usr/libexec/f50-bounded 360 "$DASH/lock" apply "$kind" "$val" >/dev/null 2>&1 &
+    [ "$q" != 0 ] || rm -f "$DIR/lock-apply.error"
+    setsid /usr/libexec/f50-bounded --keep-background 360 "$DASH/lock" apply "$kind" "$val" >/dev/null 2>&1 &
     printf '{"ok":1,"started":1,"queued":%d,"op":%s}\n' "$q" "$(json_str "lock $kind=$val")"
 }
 

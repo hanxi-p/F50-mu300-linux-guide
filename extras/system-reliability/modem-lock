@@ -54,7 +54,7 @@ LOCKCACHE=$RUNDIR/lock.json
 private_dir "$RUNDIR" || exit 1
 mkdir -p "$STATE_DIR" 2>/dev/null
 
-at() { "$AT" -t "${2:-6}" "$1" 2>/dev/null | tr -d '\r'; }
+at() { MU300_AT_LOCK_WAIT=5 MU300_AT_BUDGET=$(( ${2:-6} + 6 )) "$AT" -t "${2:-6}" "$1" 2>/dev/null | tr -d '\r'; }
 # Never WRITE bands the module does not support - the n79 lock (from the old
 # wrong capability decode) left the CP searching until it wedged. Supported
 # sets: NR from the cached SP5GCMDS caps (refreshed by every get), LTE fixed.
@@ -277,6 +277,7 @@ sfun_restart() {
     fi
     [ "$phase" = early ] || ifup "$DATA_IFACE" 2>/dev/null
     say "stack restarted ($(( $(date +%s) - ${_t0:-$(date +%s)} ))s), radio $([ "$radio_ready" = 1 ] && echo on || echo checking)"
+    [ "$radio_ready" = 1 ]
 }
 
 # sfun_restart_locked [PHASE]: sfun_restart under mobile-data's radio lock (lib.sh radio_locked), so the stack
@@ -289,7 +290,7 @@ sfun_restart_locked() {
     export _t0   # the restart's report counts from the apply's start
     MU300_RADIO_LOCK_WAIT=${MU300_RADIO_LOCK_WAIT:-120} radio_locked "$0" sfun-restart "${1:-late}" || rc=$?
     [ "$rc" = 75 ] && say "the radio stayed busy (dial or watchdog): no stack restart, the setting applies at the next one"
-    return 0
+    return "$rc"
 }
 
 # one apply at a time: overlapping SFUN dances (band lock + cell unlock + mode in
@@ -374,7 +375,7 @@ do_apply() {  # do_apply KIND VALUE
         return 0
     fi
     apply_lock
-    trap apply_unlock EXIT
+    trap 'rc=$?; if [ "$rc" != 0 ] && [ ! -s "$RUNDIR/lock-apply.error" ]; then echo "调制解调器操作失败或超时，请稍后重试" > "$RUNDIR/lock-apply.error"; fi; apply_unlock' EXIT
     trap 'exit 143' INT TERM
     kind=$1; val=$2
     case $kind in
@@ -382,6 +383,12 @@ do_apply() {  # do_apply KIND VALUE
             set -- $(mode_pair "$val"); m0=$1; gran=$2
             # keep slot1 and the primary-SIM field as the modem reported them
             tm=$(at 'AT+SPTESTMODE?' | sed -n 's/^+SPTESTMODE: *//p' | head -n1)
+            if [ -z "$tm" ]; then
+                say "network mode unchanged: modem did not answer SPTESTMODE"
+                echo '调制解调器忙或无响应，制式未修改，请稍后重试' > "$RUNDIR/lock-apply.error"
+                printf '{"ok":0,"error":"Modem busy or unavailable; network mode unchanged"}\n'
+                exit 1
+            fi
             m1=$(echo "$tm" | cut -d, -f2); prim=$(echo "$tm" | cut -d, -f3)
             [ -n "$m1" ] || m1=134; [ -n "$prim" ] || prim=0
             [ -n "$gran" ] && at "AT+SP5GRAN=$gran" 6 >/dev/null
@@ -399,7 +406,7 @@ do_apply() {  # do_apply KIND VALUE
             # seven-command fresh read follows in the background as before.
             [ -s "$LOCKCACHE" ] &&
                 sed -i "s/\"endc\":\"[0-9]\"/\"endc\":\"$([ "$val" = on ] && echo 1 || echo 0)\"/" "$LOCKCACHE" 2>/dev/null
-            setsid "$0" get fresh 9>&- >/dev/null 2>&1 &
+            setsid /usr/libexec/f50-bounded 45 "$0" get fresh 9>&- >/dev/null 2>&1 &
             return 0   # takes effect without an SFUN restart
             ;;
         lte)
@@ -482,16 +489,15 @@ do_apply() {  # do_apply KIND VALUE
             ;;
     esac
     [ "$state_saved" = 1 ] || save_state "$kind" "$val"
-    sfun_restart_locked
+    if ! sfun_restart_locked; then
+        printf '%s\n' '调制解调器未恢复就绪或无线控制锁忙，请稍后重试' > "$RUNDIR/lock-apply.error"
+        return 1
+    fi
     say "apply $kind=$val done"
     # the cache must not keep serving the pre-apply state; retry because the
     # lock reads can lag registration by a few seconds after the restart
-    ( t=$$; n=0
-      while [ $n -lt 10 ]; do
-        sh "$0" get fresh >/dev/null 2>&1
-        grep -q '"cells"' "$LOCKCACHE" 2>/dev/null && grep -qE '"(nr|lte)":\{"locked":"[0-9]' "$LOCKCACHE" 2>/dev/null && break
-        n=$((n + 1)); sleep 3
-      done ) 9>&- >/dev/null 2>&1 &
+    # One bounded readback, not ten full rounds on the control channel.
+    setsid /usr/libexec/f50-bounded 45 "$0" get fresh 9>&- >/dev/null 2>&1 &
 }
 
 # ----------------------------------------------------------------- replay

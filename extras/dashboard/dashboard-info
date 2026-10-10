@@ -286,7 +286,7 @@ if [ -r /etc/mu300/vpn.conf ]; then
     grep -q '^ENABLE=1' /etc/mu300/vpn.conf && VPN_ENABLED=1
     VPN_ENGINE=$(sed -n 's/^ENGINE=//p' /etc/mu300/vpn.conf | tail -n1)
 fi
-if ip link show xtun >/dev/null 2>&1 || ip link show sbtun >/dev/null 2>&1; then VPN_UP=1; fi
+if [ -d /sys/class/net/xtun ] || [ -d /sys/class/net/sbtun ]; then VPN_UP=1; fi
 CAP_VPN=0; [ -x /etc/init.d/mu300-vpn ] && CAP_VPN=1
 CAP_DUALBOOT=0; [ -x /opt/mu300/bin/mu300-next-boot ] && CAP_DUALBOOT=1
 

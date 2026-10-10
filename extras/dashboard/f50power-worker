@@ -17,17 +17,17 @@ rm -f /tmp/f50power-error
 # Never change thermal trips, voltage tables, radio bands or Wi-Fi power.
 restore
 if [ "$mode" = eco ]; then
- if ! /usr/libexec/f50-bounded 12 /opt/mu300/bin/mu300-toolkit profile eco >/dev/null; then restore; echo '¶¯Ì¬µ÷ÆµÉèÖÃÊ§°Ü' > /tmp/f50power-error; exit 1; fi
+ if ! /usr/libexec/f50-bounded 12 /opt/mu300/bin/mu300-toolkit profile eco >/dev/null; then restore; echo 'åŠ¨æ€è°ƒé¢‘è®¾ç½®å¤±è´¥' > /tmp/f50power-error; exit 1; fi
  for n in 7 6 5 4; do
   if ! core "$n" 0; then
-   restore; echo 'ºËÐÄ¹Ø±ÕÊ§°Ü£¬ÒÑ»Ö¸´È«ºË' > /tmp/f50power-error; exit 1
+   restore; echo 'æ ¸å¿ƒå…³é—­å¤±è´¥ï¼Œå·²æ¢å¤å…¨æ ¸' > /tmp/f50power-error; exit 1
   fi
  done
- [ "$(cat /sys/devices/system/cpu/online)" = 0-3 ] || { restore; echo 'ÔÚÏßºËÐÄ²»·ûºÏÔ¤ÆÚ£¬ÒÑ»Ö¸´È«ºË' > /tmp/f50power-error; exit 1; }
+ [ "$(cat /sys/devices/system/cpu/online)" = 0-3 ] || { restore; echo 'åœ¨çº¿æ ¸å¿ƒä¸ç¬¦åˆé¢„æœŸï¼Œå·²æ¢å¤å…¨æ ¸' > /tmp/f50power-error; exit 1; }
  # A local web health check catches a failed userspace transition without relying on WAN registration.
  sleep 3
  if ! curl -s --max-time 8 -o /dev/null http://127.0.0.1/; then
-  restore; echo '¹ÜÀí·þÎñ¼ì²éÊ§°Ü£¬ÒÑ»Ö¸´È«ºË' > /tmp/f50power-error; exit 1
+  restore; echo 'ç®¡ç†æœåŠ¡æ£€æŸ¥å¤±è´¥ï¼Œå·²æ¢å¤å…¨æ ¸' > /tmp/f50power-error; exit 1
  fi
 fi
 [ -f /etc/config/f50dashboard ] || : > /etc/config/f50dashboard

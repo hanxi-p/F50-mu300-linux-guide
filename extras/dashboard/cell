@@ -62,24 +62,28 @@ IDENT_MAXAGE=21600   # seconds; a SIM change goes through a reboot, 6 h is plent
 # a runtime directory someone else made is refused (lib.sh): write nothing
 private_dir "$DIR" || exit 1
 mkdir -p "$IDENT_DIR" 2>/dev/null
+if [ -f "$DIR/at-unavailable" ]; then
+    failed_age=$(( $(date +%s) - $(date -r "$DIR/at-unavailable" +%s 2>/dev/null || echo 0) ))
+    [ "$failed_age" -lt 20 ] && [ "$failed_age" -ge 0 ] && exit 0
+    rm -f "$DIR/at-unavailable"
+fi
 
 # nr3/nr4/nr5 belong to SIM slot 1 and return the wrong state for slot 0.
 # The dashboard therefore uses the two verified slot-0-capable optional
 # channels nr6/nr7; nr1 is only the final fallback for a failed pool channel.
 ATC=${MU300_DASH_AT_DIR:-}
 at() {
-    local cmd=$1 timeout=${2:-5} d out seen=
+    local cmd=$1 timeout=${2:-5} out
     # The assigned regular channel is first. A silent channel fails in about
     # timeout+1 seconds; only then touch the two unpolled disaster channels.
-    for d in "$ATC" /run/mu300-at6 /run/mu300-at7 /run/mu300-at; do
-        [ -n "$d" ] && [ -p "$d/cmd" ] || continue
-        case " $seen " in *" $d "*) continue ;; esac
-        seen="$seen $d"
-        out=$(MU300_AT_LOCK_WAIT=0 MU300_AT_DIR=$d "$AT" -t "$timeout" "$cmd" 2>/dev/null) || continue
-        printf '%s\n' "$out" | tr -d '\r'
-        return 0
-    done
-    out=$("$AT" -t "$timeout" "$cmd" 2>/dev/null) || return 1
+    # Optional telemetry must never fall back to the control/dial channels.
+    [ ! -f "$DIR/at-unavailable" ] || return 1
+    if [ -z "$ATC" ] || [ ! -p "$ATC/cmd" ]; then
+        : > "$DIR/at-unavailable"; return 1
+    fi
+    if ! out=$(MU300_AT_LOCK_WAIT=0 MU300_AT_BUDGET=$((timeout+4)) MU300_AT_DIR=$ATC "$AT" -t "$timeout" "$cmd" 2>/dev/null); then
+        : > "$DIR/at-unavailable"; return 1
+    fi
     printf '%s\n' "$out" | tr -d '\r'
 }
 now() { date +%s; }
@@ -312,6 +316,7 @@ qos_fragment() {  # "+CGEQOSRDP: 1,9,..OK" (this modem glues OK onto the line)
 CFUN=$(at 'AT+CFUN?' 2 | sed -n 's/^+CFUN: *//p' | head -n1)
 CEREG=$(at 'AT+CEREG?' 2 | grep '^+CEREG:' | head -n1)
 C5GREG=$(at 'AT+C5GREG?' 2 | grep '^+C5GREG:' | head -n1)
+[ ! -f "$DIR/at-unavailable" ] || exit 1
 CESQ=$(at 'AT+CESQ' 2 | grep '^+CESQ:' | head -n1)
 REG=$(reg_fragment "$CEREG"); REG5=$(reg_fragment "$C5GREG")
 CESQJ=$(cesq_fragment "$CESQ"); CFUNN=$(n_or_null "$CFUN")
@@ -357,6 +362,9 @@ if [ "$MODE" = full ]; then
 fi
 
 # "no answer at all" is a modem/daemon problem, not "no signal".
+# A timed-out channel is not a fresh 'no service' reading: retain the last
+# successful snapshot and let its existing age make the stale state visible.
+[ ! -f "$DIR/at-unavailable" ] || exit 1
 if [ -z "$CFUN$CEREG$CESQ$SP_LTE$SP_NR$COPS" ]; then
     printf '{"ts":%d,"error":"AT backend did not answer (radio off, modem restarting, or adapter unavailable)"}\n' \
         "$(now)" > "$SIGF.part" && mv "$SIGF.part" "$SIGF"

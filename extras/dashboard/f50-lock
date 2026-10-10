@@ -40,6 +40,14 @@ case "$action" in
 sweep) sweep;;
 acquire) sweep; mkdir "$d" 2>/dev/null || exit 1; write_owner || { rm -f "$d/owner.new" "$d/owner" "$d/pid"; rmdir "$d" 2>/dev/null; exit 1; };;
 adopt) [ -d "$d" ] || exit 1; write_owner;;
+handoff)
+ # Transfer while the requesting RPC is still alive. If the worker already
+ # adopted the lock, retain its ownership instead of replacing it.
+ [ -r "$d/owner" ] || exit 1
+ read -r p t born < "$d/owner"
+ if [ "$p" != "${4:-0}" ]; then alive; exit $?; fi
+ [ "$t" = "$(ticks "$p")" ] || exit 1
+ write_owner;;
 release)
  p=$(cat "$d/pid" 2>/dev/null)
  [ "$p" = "$owner" ] || exit 0

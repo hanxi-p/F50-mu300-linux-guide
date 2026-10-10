@@ -12,21 +12,30 @@ case "$1" in
 1)
     uci set openclash.config.enable=1; uci commit openclash
     /etc/init.d/openclash enable
-    /usr/libexec/f50-bounded 45 /etc/init.d/openclash start
+    /usr/libexec/f50-bounded --keep-background 60 /etc/init.d/openclash start || fail 'OpenClash å¯åŠ¨å‘½ä»¤å¤±è´¥'
     n=0
-    while ! pidof clash >/dev/null && [ "$n" -lt 60 ]; do sleep 1; n=$((n+1)); done
-    if ! pidof clash >/dev/null; then uci set openclash.config.enable="$old"; uci commit openclash; fail 'OpenClash Æô¶¯Ê§°Ü£¬Çë²é¿´²å¼şÈÕÖ¾'; fi
-    dns 1 || fail 'OpenClash ÒÑÆô¶¯£¬µ« DNS ½Ó»ØÊ§°Ü£¬Çë¼ì²é dnsmasq ÓëºËĞÄ DNS'
+    while [ "$n" -lt 75 ]; do
+        if pidof clash >/dev/null && nft list chain inet fw4 openclash >/dev/null 2>&1 && nft list chain inet fw4 openclash_output >/dev/null 2>&1; then break; fi
+        sleep 1; n=$((n+1))
+    done
+    if [ "$n" -ge 75 ]; then
+        dns 0
+        uci set openclash.config.enable=0; uci commit openclash
+        /usr/libexec/f50-bounded --keep-background 45 /etc/init.d/openclash stop
+        fail 'OpenClash æ ¸å¿ƒæˆ–é˜²ç«å¢™æœªå°±ç»ªï¼Œå·²æ¢å¤ç›´è¿ DNS'
+    fi
+    if ! pidof clash >/dev/null; then uci set openclash.config.enable="$old"; uci commit openclash; fail 'OpenClash å¯åŠ¨å¤±è´¥ï¼Œè¯·æŸ¥çœ‹æ’ä»¶æ—¥å¿—'; fi
+    dns 1 || fail 'OpenClash å·²å¯åŠ¨ï¼Œä½† DNS æ¥å›å¤±è´¥ï¼Œè¯·æ£€æŸ¥ dnsmasq ä¸æ ¸å¿ƒ DNS'
     ;;
 0)
-    dns 0 || fail 'Ö±Á¬ DNS ÉèÖÃÊ§°Ü£¬ÒÑ±£Áô OpenClash ÔËĞĞ×´Ì¬'
+    dns 0 || fail 'ç›´è¿ DNS è®¾ç½®å¤±è´¥ï¼Œå·²ä¿ç•™ OpenClash è¿è¡ŒçŠ¶æ€'
     uci set openclash.config.enable=0; uci commit openclash
-    /usr/libexec/f50-bounded 45 /etc/init.d/openclash stop
+    /usr/libexec/f50-bounded --keep-background 45 /etc/init.d/openclash stop
     if pidof clash >/dev/null; then
         uci set openclash.config.enable="$old"; uci commit openclash
         dns 1
-        fail 'OpenClash Î´ÄÜÍ£Ö¹£¬Çë²é¿´²å¼şÈÕÖ¾'
+        fail 'OpenClash æœªèƒ½åœæ­¢ï¼Œè¯·æŸ¥çœ‹æ’ä»¶æ—¥å¿—'
     fi
-    dns 0 || fail "Ö±Á¬ DNS »Ö¸´Ê§°Ü"
+    dns 0 || fail "ç›´è¿ DNS æ¢å¤å¤±è´¥"
     ;;
 esac

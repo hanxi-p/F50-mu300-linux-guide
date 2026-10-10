@@ -1,0 +1,157 @@
+#!/bin/sh
+# Send an AT command through mu300-atd (which owns the modem's AT channel; see that script for why).
+#   mu300-at "AT+CSQ"            print the reply
+#   mu300-at -t 20 "AT+SFUN=4"   wait longer than the default 6 s
+# Falls back to opening the tty directly when the daemon is not running - that works once, and then the channel
+# needs a modem restart, so the daemon is strongly preferred.
+# Needs a shell with "read -t" (bash or busybox ash): dash has no such option, and this tty ignores the termios
+# timer and blocks in the driver instead - see mu300-atd for the whole story.
+set -u
+# OpenWrt keeps the applets this needs (timeout) in the static busybox next to us
+export PATH="$PATH:/opt/mu300/bin:/opt/mu300/busybox-bin:/usr/sbin:/sbin"
+if [ -n "$(read -t 1 _probe </dev/null 2>&1)" ]; then
+    for sh in /bin/bash /usr/bin/bash /bin/busybox; do
+        [ -x "$sh" ] || continue
+        case $sh in */busybox) exec "$sh" ash "$0" "$@" ;; *) exec "$sh" "$0" "$@" ;; esac
+    done
+    echo "mu300-at: need bash or busybox ash (this shell has no 'read -t')" >&2; exit 1
+fi
+DIR=${MU300_AT_DIR:-/run/mu300-at}
+DEV=${MU300_AT_DEV:-/dev/stty_nr1}
+CR=$(printf '\r')
+mono() { cut -d. -f1 /proc/uptime; }
+T=6
+[ "${1:-}" = -t ] && { T=$2; shift 2; }
+cmd=${1:-}
+[ -n "$cmd" ] || { echo "usage: mu300-at [-t SECONDS] \"AT+COMMAND\"" >&2; exit 2; }
+
+if [ -p "$DIR/cmd" ]; then
+    # one client at a time: the daemon serves a single command per round. The wait has to cover the slowest
+    # command somebody else may be running (AT+SFUN=4 takes ~20 s), not just this one.
+    # This is the mutex between clients only. The daemon's own "I hold the channel" directory is $DIR/owner:
+    # the two were the same path once, and since the daemon never lets go, every client then waited out the
+    # full 90 s and gave up on an idle modem (see mu300-atd).
+    lock=$DIR/lock
+    # The lock, the command and the answer all live in $DIR, which is root's: as a user nothing below can work,
+    # and it used to loop for ever on a stale lock it could not remove ("mobile-data status" without sudo hung).
+    if [ ! -w "$DIR" ] || [ ! -w "$DIR/cmd" ]; then
+        echo "mu300-at: needs root (cannot write $DIR); try: sudo ${0##*/} ..." >&2
+        exit 1
+    fi
+    wait=${MU300_AT_LOCK_WAIT:-90}
+    lock_end=$(( $(mono) + wait ))
+    while ! mkdir "$lock" 2>/dev/null; do
+        # a client killed with SIGKILL cannot clean up after itself; take the lock over when its owner is gone.
+        # Only "continue" (which skips the wait below) once the lock is really gone.
+        owner=$(cat "$lock/pid" 2>/dev/null || true)
+        if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+            rm -rf "$lock" 2>/dev/null && continue
+        # a daemon from before the split left its ownership directory here, and it will never release it
+        elif [ -n "$owner" ] && { tr '\0' ' ' < "/proc/$owner/cmdline"; } 2>/dev/null | grep -q mu300-atd; then
+            rm -rf "$lock" 2>/dev/null && continue
+        fi
+        [ "$(mono)" -ge "$lock_end" ] && { echo "mu300-at: busy" >&2; exit 1; }
+        /opt/mu300/bin/busybox sleep 0.1 2>/dev/null || sleep 1
+    done
+    echo $$ > "$lock/pid" 2>/dev/null || true
+    trap 'rm -rf "$lock" 2>/dev/null' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # The answer comes back in a file of our own, not through a fifo: a fifo needs both ends at the same time,
+    # so a client that gave up waiting used to leave the daemon (or a leftover writer) blocked for ever.
+    answer=$DIR/answer.$$
+    rm -f "$answer" "$answer.part"
+    trap 'rm -rf "$lock" "$answer" "$answer.part" 2>/dev/null' EXIT
+    # a signalled client must stop, not keep polling while another client already holds the lock
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    # Open the FIFO read-write. A write-only open blocks until a reader opens the *same inode*: if procd replaces
+    # the daemon between the path lookup and that open, the client and the new daemon wait for ever on two
+    # different, unlinked FIFOs while this client keeps the global command lock. O_RDWR never blocks; with no
+    # daemon the answer timeout below releases the lock. (This also replaces the old `timeout N sh -c printf`
+    # wrapper, which cost 200+ ms of forks per command on this SoC.)
+    # Test -p right before the open, and again after it: `<>` creates a regular file when the FIFO vanished in
+    # between (daemon stopping), and later clients would then take the direct-tty path. A file we created that
+    # way is empty and removed again; the window is the microseconds between the open and the re-test.
+    # (A failing `exec` redirection ends a POSIX shell, and `2>/dev/null` on exec would stick, so no probe by open.)
+    [ -p "$DIR/cmd" ] || { echo "mu300-at: the daemon is not reading commands" >&2; exit 1; }
+    exec 9<> "$DIR/cmd"
+    [ -p "$DIR/cmd" ] || {
+        [ -f "$DIR/cmd" ] && [ ! -s "$DIR/cmd" ] && rm -f "$DIR/cmd"
+        echo "mu300-at: the daemon is not reading commands" >&2; exit 1; }
+    # fd 9 stays open until the answer is in: mu300-atd opens the FIFO once per command, between its drain and
+    # collect phases it has no descriptor on it, and the kernel throws away buffered data when the last
+    # descriptor closes. Closing right after the write lost the command whenever the daemon was busy.
+    # O_RDWR prevents open-time deadlock but a full FIFO can still block write.
+    # Bound the builtin writer while this client retains fd 9 for the answer.
+    if [ -x /usr/libexec/f50-bounded ]; then
+        /usr/libexec/f50-bounded 3 sh -c 'printf "%s %s %s\n" "$1" "$2" "$3" >&9' sh "$T" "$answer" "$cmd"
+    else
+        /opt/mu300/bin/busybox timeout -k 1 3 sh -c 'printf "%s %s %s\n" "$1" "$2" "$3" >&9' sh "$T" "$answer" "$cmd"
+    fi || {
+        echo "mu300-at: the daemon is not reading commands" >&2; exit 1; }
+    # Fast poll: the daemon typically answers in ~20 ms, so a 1 s sleep adds a full second to every AT round trip.
+    # The image's busybox sleep rejects fractions when called as /bin/sleep, which used to sink the chain into
+    # `sleep 1` (measured: 30 commands in 30.6 s). The static busybox next to us accepts them; use it when present.
+    bb=${MU300_BUSYBOX:-/opt/mu300/bin/busybox}
+    # Budget. A live mu300-atd (owner/pid) drains first (1-3 s, 25 s after a silent command), then collects for T
+    # to T + 1 s plus up to 2 s of overrun; a chattering channel can stretch the drain by one 1 s wait, and this
+    # loop's own whole-second clock gives up to 1 s early: 26 + T + 3 + 1, and 1 s of slack make T + 31. Giving up earlier drops the lock
+    # while the daemon is still busy and orphans the answer file. With no live daemon nobody will ever answer, so
+    # exit within T + 2.
+    budget=$((T + 2))
+    owner=$(cat "$DIR/owner/pid" 2>/dev/null || true)
+    if [ -n "$owner" ] && { tr '\0' ' ' < "/proc/$owner/cmdline"; } 2>/dev/null | grep -q mu300-atd; then
+        budget=$((T + 31))
+    fi
+    # MU300_AT_BUDGET (seconds) shortens that for a caller with a hard limit of its own (the LuCI panel: rpcd ends a
+    # call at 30 s), which would rather say "no answer" than be killed. The daemon still runs the command then, and
+    # its late answer file is left behind; nobody else sets it.
+    case ${MU300_AT_BUDGET:-} in
+        ''|*[!0-9]*) ;;
+        *) [ "$MU300_AT_BUDGET" -lt "$budget" ] && budget=$MU300_AT_BUDGET ;;
+    esac
+    end=$(( $(mono) + budget ))
+    while [ ! -e "$answer" ]; do
+        [ "$(mono)" -ge "$end" ] && { echo "mu300-at: no answer from the daemon" >&2; exit 1; }
+        if [ -x "$bb" ]; then "$bb" sleep 0.01 2>/dev/null || sleep 1
+        else sleep 0.1 2>/dev/null || sleep 1; fi
+    done
+    # atd always creates the answer file, even for a timeout, so an empty or partial file is not success: callers
+    # such as atwatch use the exit code to tell a responding channel from a silent one. Require a final result code.
+    grep -aEq '^(OK|ERROR|\+CME ERROR|\+CMS ERROR|CONNECT|NO CARRIER)' "$answer" 2>/dev/null || {
+        echo "mu300-at: modem returned no final response" >&2
+        exit 1
+    }
+    exec 9>&-
+    cat "$answer"
+    exit 0
+fi
+
+# No command fifo is not the same as no daemon: remove $DIR under a running mu300-atd and its descriptor is still
+# the one the modem talks to. Opening the device here would make a second reader on a channel that hands each
+# line to exactly one of them, so refuse instead - and the direct path below is a one-shot in any case, because
+# closing this channel while the modem is running leaves it silent until a reboot (FINDINGS 13b).
+owner=$(cat "$DIR/owner/pid" 2>/dev/null || true)
+if [ -n "$owner" ] && [ -d "/proc/$owner" ] &&
+   { tr '\0' ' ' < "/proc/$owner/cmdline"; } 2>/dev/null | grep -qE 'mu300-atd|mobile-data'; then
+    echo "mu300-at: pid $owner holds $DEV and its command fifo is gone; restart mu300-atd" >&2
+    exit 1
+fi
+
+echo "mu300-at: daemon not running, using $DEV directly (this can wedge the channel)" >&2
+[ -c "$DEV" ] || { echo "mu300-at: no $DEV" >&2; exit 1; }
+exec 3<>"$DEV"
+stty raw -echo <&3 2>/dev/null || true
+drain_end=$(( $(mono) + 3 ))
+while [ "$(mono)" -lt "$drain_end" ]; do j=; IFS= read -r -t 1 j <&3 || break; done
+printf '%s\r' "$cmd" >&3
+end=$(( $(mono) + T + 1 ))   # deadline unaffected by clock synchronization
+while [ "$(mono)" -lt "$end" ]; do
+    l=
+    IFS= read -r -t 2 l <&3 || continue
+    l=${l%"$CR"}; [ -n "$l" ] || continue
+    echo "$l"
+    case $l in OK|ERROR|+CME\ ERROR*|+CMS\ ERROR*|CONNECT*|NO\ CARRIER) break ;; esac
+done
+exec 3>&-

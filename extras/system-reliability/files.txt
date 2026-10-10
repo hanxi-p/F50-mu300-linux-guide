@@ -7,3 +7,4 @@ mu300-update /opt/mu300/bin/mu300-update
 19-mu300-fw4 /etc/hotplug.d/iface/19-mu300-fw4
 f50-bounded /usr/libexec/f50-bounded
 modem-lock /usr/libexec/unisoc-modem/lock
+mu300-at /opt/mu300/bin/mu300-at
