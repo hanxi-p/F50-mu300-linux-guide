@@ -4,6 +4,8 @@ export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
 umask 077
 D=/etc/mu300/sms-email
 . "$D/settings"
+exec 6>/run/f50-sms-email-enqueue.flock
+flock 6
 id=${SMS_ID:-}
 case "$id" in ''|*[!0-9A-Za-z_-]*) exit 2;; esac
 [ ! -f "$D/sent/$id" ] || exit 0
@@ -24,3 +26,4 @@ subject=$(printf '%s' '来自F50新信息' | /opt/mu300/bin/busybox base64 | tr 
 chmod 600 "$temp"
 mv "$temp" "$D/outbox/$id.eml"
 sync "$D/outbox/$id.eml"
+sync "$D/outbox"

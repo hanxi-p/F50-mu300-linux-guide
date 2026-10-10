@@ -21,6 +21,9 @@ sha256sum -c SHA256SUMS >/dev/null
 if [ -e /etc/mu300/sms-hook ] && ! grep -q f50-sms-email /etc/mu300/sms-hook; then
  echo 'Existing SMS hook found; adapt it before installing this feature'; exit 1
 fi
+pool=$(uci -q get unisoc_modem.main.sms_pool || echo /etc/mu300/sms-pool)
+case "$pool" in /etc/mu300/*|/etc/unisoc-modem/*) ;; *) echo 'Unsupported SMS pool path'; exit 1;; esac
+case "$pool" in *[!A-Za-z0-9/_-]*) exit 1;; esac
 B=/root/f50-sms-email-backups/$(date +%Y%m%d-%H%M%S)-$$
 mkdir -p "$B"
 if [ -x /etc/init.d/f50-sms-email ] && /etc/init.d/f50-sms-email enabled; then echo 1 > "$B/enabled"; else echo 0 > "$B/enabled"; fi
@@ -30,8 +33,10 @@ cat > "$B/paths" <<'PATHS'
 /etc/mu300/sms-email/settings
 /etc/mu300/sms-email/msmtprc
 /etc/mu300/sms-email/smtp-password
+/etc/mu300/sms-email/first-id
 /usr/libexec/f50-sms-email-enqueue
 /usr/libexec/f50-sms-email-worker
+/usr/libexec/f50-sms-email-reconcile
 /usr/libexec/f50-bounded
 /etc/init.d/f50-sms-email
 PATHS
@@ -44,7 +49,12 @@ D=/etc/mu300/sms-email
 mkdir -p "$D/outbox" "$D/sent"
 chmod 700 "$D" "$D/outbox" "$D/sent"
 cp "$password_file" "$D/smtp-password"
-printf "FROM='%s'\nTO='%s'\n" "$from" "$to" > "$D/settings"
+printf "FROM='%s'\nTO='%s'\nPOOL='%s'\n" "$from" "$to" "$pool" > "$D/settings"
+if [ ! -f "$D/first-id" ]; then
+ next=$(cat "$pool/next_id" 2>/dev/null || echo 0)
+ case "$next" in ''|*[!0-9]*) exit 1;; esac
+ echo $((next+1)) > "$D/first-id"
+fi
 cat > "$D/msmtprc" <<EOF
 defaults
 auth on
@@ -63,12 +73,13 @@ EOF
 chmod 600 "$D/settings" "$D/msmtprc" "$D/smtp-password"
 cp enqueue.sh /usr/libexec/f50-sms-email-enqueue
 cp worker.sh /usr/libexec/f50-sms-email-worker
+cp reconcile.sh /usr/libexec/f50-sms-email-reconcile
 cp bounded.sh /usr/libexec/f50-bounded
 cp service.sh /etc/init.d/f50-sms-email
 printf '#!/bin/sh\nexec /usr/libexec/f50-bounded 20 /usr/libexec/f50-sms-email-enqueue\n' > /etc/mu300/sms-hook
 chmod 700 /etc/mu300/sms-hook
-chmod 755 /usr/libexec/f50-sms-email-enqueue /usr/libexec/f50-sms-email-worker /usr/libexec/f50-bounded /etc/init.d/f50-sms-email
-for p in /etc/mu300/sms-hook /usr/libexec/f50-sms-email-enqueue /usr/libexec/f50-sms-email-worker /usr/libexec/f50-bounded /etc/init.d/f50-sms-email; do sh -n "$p"; done
+chmod 755 /usr/libexec/f50-sms-email-enqueue /usr/libexec/f50-sms-email-worker /usr/libexec/f50-sms-email-reconcile /usr/libexec/f50-bounded /etc/init.d/f50-sms-email
+for p in /etc/mu300/sms-hook /usr/libexec/f50-sms-email-enqueue /usr/libexec/f50-sms-email-worker /usr/libexec/f50-sms-email-reconcile /usr/libexec/f50-bounded /etc/init.d/f50-sms-email; do sh -n "$p"; done
 sync
 /etc/init.d/f50-sms-email enable
 /etc/init.d/f50-sms-email start
