@@ -48,5 +48,13 @@ if [ "$old_server" != "$upstream" ] || [ "$old_noresolv" != "$new_noresolv" ]; t
  fi
  uci commit dhcp
  /usr/libexec/f50-bounded 15 /etc/init.d/dnsmasq reload || exit 1
+ # procd may return before the replacement daemon has bound its DNS socket.
+ # Read local readiness rather than requiring working WAN during recovery.
+ ready=0
+ for attempt in $(seq 1 12); do
+  if awk '$2 ~ /:0035$/ {found=1} END {exit !found}' /proc/net/udp /proc/net/udp6; then ready=1; break; fi
+  sleep 1
+ done
+ [ "$ready" = 1 ] || { logger -t f50-dns 'dnsmasq reload returned but DNS socket is not ready'; exit 1; }
  logger -t f50-dns "upstream=${upstream:-WAN} bypass=$(test -f /tmp/f50-dns-bypass && echo yes || echo no)"
 fi

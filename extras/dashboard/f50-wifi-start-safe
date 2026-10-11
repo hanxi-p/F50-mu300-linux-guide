@@ -10,6 +10,23 @@ enabled() {
  [ "$(uci -q get wireless.radio0.disabled)" != 1 ] && [ "$(uci -q get wireless.ap0.disabled)" != 1 ]
 }
 enabled || exit 0
+# Some vendor boots expose an all-zero PHY address although wlan0 has its
+# assigned address. Pin only a missing/invalid AP address to that real address.
+valid_mac() {
+ printf '%s\n' "$1" | grep -Eq '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$' || return 1
+ case "$1" in 00:00:00:00:00:00|ff:ff:ff:ff:ff:ff|FF:FF:FF:FF:FF:FF) return 1;; esac
+ first=${1%%:*}
+ [ $((0x$first & 1)) -eq 0 ]
+}
+configured_mac=$(uci -q get wireless.ap0.macaddr)
+if ! valid_mac "$configured_mac"; then
+ actual_mac=$(cat /sys/class/net/wlan0/address 2>/dev/null)
+ if ! valid_mac "$actual_mac"; then
+  logger -t f50-wifi-start 'No valid interface MAC; recovery deferred without starting a zero-BSSID AP'
+  exit 1
+ fi
+ uci set wireless.ap0.macaddr="$actual_mac" && uci commit wireless || exit 1
+fi
 ready=0
 for n in $(seq 1 12); do
  /usr/libexec/f50-bounded 5 iw reg set "$country" >/dev/null 2>&1
@@ -36,8 +53,10 @@ for attempt in 1 2; do
  # ACS/HT scan can take over a minute on this driver.
  for n in $(seq 1 25); do
   enabled || exit 0
-  if /usr/libexec/f50-bounded 5 ubus call hostapd.wlan0 get_status 2>/dev/null | grep -q '"status": "ENABLED"'; then
-   logger -t f50-wifi-start 'AP verified ENABLED'
+  status=$(/usr/libexec/f50-bounded 5 ubus call hostapd.wlan0 get_status 2>/dev/null)
+  bssid=$(printf '%s\n' "$status" | jsonfilter -e '@.bssid')
+  if printf '%s\n' "$status" | grep -q '"status": "ENABLED"' && valid_mac "$bssid"; then
+   logger -t f50-wifi-start 'AP ENABLED with valid BSSID; client connectivity requires separate verification'
    exit 0
   fi
   sleep 2

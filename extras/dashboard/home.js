@@ -82,7 +82,7 @@ return view.extend({
 		if (seed) {
 			try {
 				var initial = dashboardResult(JSON.parse(seed.textContent));
-				requestAnimationFrame(function(){ if(document.documentElement.contains(root)) self.update(initial); });
+				requestAnimationFrame(function(){ if(document.documentElement.contains(root)) {try{self.update(initial);}catch(e){console.warn('F50 cached render failed',e);}} });
 			} catch(e) {}
 			seed.remove();
 		}
@@ -93,9 +93,9 @@ return view.extend({
 		/* Read the full status once now; never run the sysinfo and status collections twice at the same time. */
 		var first = L.resolveDefault(dashboardStatus()).then(function(st) {
 			self.update(st || {});
-		});
-		/* Keep control RPCs out of the first status response batch. */
-		first.finally(function(){
+		}).catch(function(e){console.warn('F50 first render failed; polling will retry',e);});
+		/* Mount controls independently: history timeout must not disable switches. */
+		requestAnimationFrame(function(){
 			if(!document.documentElement.contains(root)) return;
 			self._channelDispose = F50Channel.mount(root);
 			self._quotaDispose = F50Quota.mount(root);
@@ -107,7 +107,7 @@ return view.extend({
 		 * timer so 1.5 s remains 1.5 s and slow requests never overlap. */
 		function refresh() {
 			if (!document.documentElement.contains(root)) return;
-			L.resolveDefault(dashboardStatus()).then(function(st) { self.update(st || {}); }).finally(function() {
+			L.resolveDefault(dashboardStatus()).then(function(st) { self.update(st || {}); }).catch(function(e){console.warn('F50 render failed; polling will retry',e);}).finally(function() {
 				if (document.documentElement.contains(root))
 					self._refreshTimer = setTimeout(refresh, intervalMs);
 			});
@@ -163,8 +163,8 @@ return view.extend({
     <div class="mud-kpi"><b id="mud-session-tx">--</b><span>本次累计发送</span></div>
   </div>
   <div class="mud-kpis">
-    <div class="mud-kpi"><b id="mud-rx">--</b><span>本月累计接收</span></div>
-    <div class="mud-kpi"><b id="mud-tx">--</b><span>本月累计发送</span></div>
+    <div class="mud-kpi"><b id="mud-rx">--</b><span>本小时使用流量</span></div>
+    <div class="mud-kpi"><b id="mud-tx">--</b><span>今日使用流量</span></div>
   </div>
   <div id="f50-quota-slot" style="margin:0 0 16px">
     <div class="mud-kpis">
@@ -498,17 +498,23 @@ return view.extend({
   var el=this._root.querySelector('#mud-rate-chart'),self=this;
   if(!el || this.dlHist.length<1)return;
   var historySize=Math.max(1,this.dlHist.length-1);
-  var peak=Math.max(1,Math.max.apply(null,this.dlHist.concat(this.ulHist))),left=0,right=900,top=12,bottom=186;
+  var dlPeak=Math.max(0,Math.max.apply(null,this.dlHist)),ulPeak=Math.max(0,Math.max.apply(null,this.ulHist));
+  var peak=Math.max(1,dlPeak,ulPeak),left=0,right=900,top=12,bottom=186;
   var divisor=peak>=1048576?1048576:peak>=1024?1024:1,unit=divisor===1048576?'MB/s':divisor===1024?'KB/s':'B/s';
-  var normalized=peak/divisor,power=Math.pow(10,Math.floor(Math.log10(normalized))),fraction=normalized/power;
-  peak=(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power*divisor;
+  var normalized=peak/divisor/5,power=Math.pow(10,Math.floor(Math.log10(normalized))),fraction=normalized/power;
+  var step=Math.max(1,(fraction<=1?1:fraction<=2?2:fraction<=5?5:10)*power*divisor);
+  var dlLimit=Math.max(step,Math.ceil(dlPeak/step)*step),ulLimit=Math.max(step,Math.ceil(ulPeak/step)*step);
+  var scale=(bottom-top)/(dlLimit+ulLimit),mid=top+dlLimit*scale;
   function tick(value){return Number((value/divisor).toPrecision(2)).toString();}
-  var mid=100,amplitude=88;
-  function pts(arr,up){var result=[];arr.forEach(function(v,i){var x=left+i/historySize*(right-left),y=mid+(up?-1:1)*Math.min(1,Math.max(0,v)/peak)*amplitude;y=Math.round(y/3)*3;if(i)result.push(x.toFixed(1)+','+result[result.length-1].split(',')[1]);result.push(x.toFixed(1)+','+y);});return result.join(' ');}
-  function area(arr,up){return '0,100 '+pts(arr,up)+' 900,100';}
-  var grid='';[12,56,100,144,188].forEach(function(y){grid+='<line x1="0" y1="'+y+'" x2="900" y2="'+y+'" stroke="#557786" opacity=".12"/>';});
+  function pts(arr,up){var result=[];arr.forEach(function(v,i){var x=left+i/historySize*(right-left),y=mid+(up?-1:1)*Math.max(0,v)*scale;y=Number(y.toFixed(2));if(i)result.push(x.toFixed(1)+','+result[result.length-1].split(',')[1]);result.push(x.toFixed(1)+','+y);});return result.join(' ');}
+  function area(arr,up){return '0,'+mid+' '+pts(arr,up)+' 900,'+mid;}
+  var grid='',axis='';
+  function mark(value,up){var y=mid+(up?-1:1)*value*scale;grid+='<line x1="0" y1="'+y+'" x2="900" y2="'+y+'" stroke="#557786" opacity=".12"/>';axis+='<span class="'+(value?(up?'f50-axis-dl':'f50-axis-ul'):'')+'" style="top:'+(y/2)+'%">'+tick(value)+'</span>';}
+  for(var v=dlLimit;v>step/2;v-=step)mark(v,true);
+  mark(0,true);
+  for(var v=step;v<=ulLimit+step/2;v+=step)mark(v,false);
   var latestDl=this.dlHist[this.dlHist.length-1]||0,latestUl=this.ulHist[this.ulHist.length-1]||0;
-  el.innerHTML='<div class="f50-rate-axis-unit">'+unit+'</div><div class="f50-rate-value-axis" aria-label="动态速率纵轴"><span class="f50-axis-dl" style="top:6%">'+tick(peak)+'</span><span class="f50-axis-dl" style="top:28%">'+tick(peak/2)+'</span><span style="top:50%">0</span><span class="f50-axis-ul" style="top:72%">'+tick(peak/2)+'</span><span class="f50-axis-ul" style="top:94%">'+tick(peak)+'</span></div><div class="f50-btop-label f50-btop-dl"><span></span><span>峰值 '+M.fmtRate(Math.max.apply(null,this.dlHist))+'</span></div><svg class="f50-rate-svg" role="img" aria-label="btop 风格上下行速率历史曲线" viewBox="0 0 900 200" preserveAspectRatio="none"><defs><pattern id="f50-net-pixels" width="9" height="6" patternUnits="userSpaceOnUse"><rect width="7" height="4" fill="white"/></pattern><mask id="f50-net-mask"><rect width="900" height="200" fill="url(#f50-net-pixels)"/></mask></defs>'+grid+'<g mask="url(#f50-net-mask)"><polygon data-series="download" points="'+area(this.dlHist,true)+'" fill="#70c8ef"/><polygon data-series="upload" points="'+area(this.ulHist,false)+'" fill="#4dcbb6"/></g><polyline points="'+pts(this.dlHist,true)+'" stroke="#249ad1" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/><polyline points="'+pts(this.ulHist,false)+'" stroke="#159b85" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/><line x1="0" y1="100" x2="900" y2="100" stroke="#adcbd6" stroke-width="1"/><line id="mud-rate-cursor" y1="12" y2="186" stroke="#385666" opacity=".6" style="display:none"/></svg><div class="f50-btop-label f50-btop-ul"><span></span><span>峰值 '+M.fmtRate(Math.max.apply(null,this.ulHist))+'</span></div><div class="f50-rate-time-axis" aria-label="时间坐标轴"><span id="mud-rate-start"></span><span id="mud-rate-end"></span></div>';
+  el.innerHTML='<div class="f50-rate-axis-unit">'+unit+'</div><div class="f50-rate-value-axis" aria-label="动态速率纵轴">'+axis+'</div><div class="f50-btop-label f50-btop-dl"><span></span><span>峰值 '+M.fmtRate(Math.max.apply(null,this.dlHist))+'</span></div><svg class="f50-rate-svg" role="img" aria-label="btop 风格上下行速率历史曲线" data-download-limit="'+dlLimit+'" data-upload-limit="'+ulLimit+'" data-scale="'+scale+'" data-zero="'+mid+'" viewBox="0 0 900 200" preserveAspectRatio="none"><defs><pattern id="f50-net-pixels" width="9" height="6" patternUnits="userSpaceOnUse"><rect width="7" height="4" fill="white"/></pattern><mask id="f50-net-mask"><rect width="900" height="200" fill="url(#f50-net-pixels)"/></mask></defs>'+grid+'<g mask="url(#f50-net-mask)"><polygon data-series="download" points="'+area(this.dlHist,true)+'" fill="#70c8ef"/><polygon data-series="upload" points="'+area(this.ulHist,false)+'" fill="#4dcbb6"/></g><polyline points="'+pts(this.dlHist,true)+'" stroke="#249ad1" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/><polyline points="'+pts(this.ulHist,false)+'" stroke="#159b85" fill="none" stroke-width="1.5" vector-effect="non-scaling-stroke"/><line x1="0" y1="'+mid+'" x2="900" y2="'+mid+'" stroke="#adcbd6" stroke-width="1"/><line id="mud-rate-cursor" y1="12" y2="186" stroke="#385666" opacity=".6" style="display:none"/></svg><div class="f50-btop-label f50-btop-ul"><span></span><span>峰值 '+M.fmtRate(Math.max.apply(null,this.ulHist))+'</span></div><div class="f50-rate-time-axis" aria-label="时间坐标轴"><span id="mud-rate-start"></span><span id="mud-rate-end"></span></div>';
   function time(t){return new Date(t).toLocaleTimeString('zh-CN',{hour12:false});}
   M.set('rate-start',time(this.rateTimes[0]));M.set('rate-end',time(this.rateTimes[this.rateTimes.length-1]));
   var seconds=this.rateTimes.length>1?(this.rateTimes[this.rateTimes.length-1]-this.rateTimes[0])/1000:0;
@@ -624,7 +630,11 @@ return view.extend({
 
 	repaintNeigh: function() {
 		var el = M.v('neigh');
-		if (el && this.lastCell) el.innerHTML = M.neighborRows(this.lastCell, this.lockedCell);
+		if (el && this.lastCell) {
+			var cell=Object.assign({},this.lastCell);
+			cell.neigh=(Array.isArray(cell.neigh)?cell.neigh:[]).filter(function(n){return n && typeof n==='object' && ['nr','lte'].indexOf(n.rat)>=0;}).map(function(n){var row=Object.assign({},n);['rsrp','rsrq','sinr'].forEach(function(k){row[k]=n[k]!=null && Number.isFinite(Number(n[k]))?Number(n[k]):null;});return row;});
+			el.innerHTML = M.neighborRows(cell, this.lockedCell);
+		}
 	},
 
 	update: function(st) {

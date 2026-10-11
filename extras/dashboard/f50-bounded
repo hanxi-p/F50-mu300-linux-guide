@@ -9,7 +9,13 @@ case "$limit" in ''|*[!0-9]*) exit 2;; esac
 worker=''; timer=''; code=1
 state=$(mktemp -d /tmp/f50-bounded.XXXXXX) || exit 1
 cleanup() {
- [ -z "$timer" ] || /opt/mu300/bin/busybox kill -KILL "-$timer" 2>/dev/null
+ if [ -n "$timer" ]; then
+  /opt/mu300/bin/busybox kill -KILL "-$timer" 2>/dev/null
+  # The command can finish before setsid has created the timer's group.
+  # Kill/reap its PID too, before removing the state directory.
+  /opt/mu300/bin/busybox kill -KILL "$timer" 2>/dev/null
+  wait "$timer" 2>/dev/null || true
+ fi
  # A successful service launch may still be configuring its firewall.
  [ "$keep" = 1 ] && [ "$code" = 0 ] && [ ! -f "$state/timed-out" ] && { rm -rf "$state"; return 0; }
  # Give nested bounded helpers time to clean their own detached groups.

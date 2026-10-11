@@ -26,8 +26,9 @@ while :; do
  # Probe the actual selected service: dnsmasq's cache must not hide a dead upstream.
  if /usr/libexec/f50-dns-health "$port"; then
   bad=0
-  if [ "$state" != "$last" ] || [ -f /tmp/f50-dns-bypass ]; then
-   bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1
+  if [ "$state" != "$last" ] || [ -f /tmp/f50-dns-bypass ] || [ -f /tmp/f50-dns-recheck ]; then
+   rm -f /tmp/f50-dns-recheck
+   bounded 45 /usr/libexec/f50-dns-route auto >/tmp/f50-dns-guard.log 2>&1 || touch /tmp/f50-dns-recheck
   fi
  else
   bad=$((bad+1))

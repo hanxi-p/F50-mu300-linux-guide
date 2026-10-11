@@ -1,6 +1,15 @@
 #!/bin/sh
 # AP health first: an in-progress edit must not interrupt an already working AP.
 status=$1; carrier=$2; pending=$3; age=$4
+if [ "$#" -ge 5 ]; then
+ bssid=$5
+ if ! printf '%s\n' "$bssid" | grep -Eq '^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'; then status=INVALID
+ else
+  first=${bssid%%:*}
+  case "$bssid" in 00:00:00:00:00:00) status=INVALID;; esac
+  [ $((0x$first & 1)) -eq 0 ] || status=INVALID
+ fi
+fi
 if [ "$status" = ENABLED ] && [ "$carrier" = 1 ]; then echo healthy
 elif [ "$pending" = true ] && [ "$age" -lt 180 ]; then echo pending
 else echo broken; fi

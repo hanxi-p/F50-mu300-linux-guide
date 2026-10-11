@@ -9,6 +9,10 @@ for cmd in vnstat ubus uci jsonfilter setsid flock sha256sum curl; do command -v
 ip link show sipa_eth0 >/dev/null || { echo '当前蜂窝接口不是 sipa_eth0，请先适配统计接口'; exit 1; }
 [ "$(uci -q get wireless.radio0.band)" = 5g ] && [ "$(uci -q get wireless.ap0.device)" = radio0 ] || { echo '此版本匹配 radio0 / ap0 和 5GHz 无线，请先适配'; exit 1; }
 sha256sum -c SHA256SUMS >/dev/null
+case "$(sha256sum /usr/sbin/vnstatd | awk '{print $1}')" in
+ 7eca0a8d4d07f7c01c1703a096afde01e133d73c963b2a58e2a035ffeda219a9|436b3a8dd8efe250d21a908ba6ab36a70872832285d3a70dffeb2ddcf3507026) ;;
+ *) echo 'vnstatd 版本不匹配计数复位补丁，请先适配；尚未修改服务。'; exit 1;;
+esac
 for path in /usr/share/ucode/luci/template/themes/aurora/header.ut /usr/share/ucode/luci/template/header.ut /etc/init.d/mu300-hw; do
  [ -r "$path" ] || { echo "缺少 $path；此版本首屏优化需要 Aurora UT 主题，请先适配。"; exit 1; }
 done
@@ -19,7 +23,7 @@ if /etc/init.d/vnstat enabled; then echo 1 > "$backup/vnstat.enabled"; else echo
 if /etc/init.d/vnstat running; then echo 1 > "$backup/vnstat.running"; else echo 0 > "$backup/vnstat.running"; fi
 if [ -x /etc/init.d/f50power ] && /etc/init.d/f50power enabled; then echo 1 > "$backup/f50power.enabled"; else echo 0 > "$backup/f50power.enabled"; fi
 if [ -x /etc/init.d/f50history ] && /etc/init.d/f50history enabled; then echo 1 > "$backup/f50history.enabled"; else echo 0 > "$backup/f50history.enabled"; fi
-for service in f50-wifi-guard f50-dns-guard; do
+for service in f50-wifi-guard f50-dns-guard f50-diagnostics f50-traffic-archive; do
  if [ -x /etc/init.d/$service ] && /etc/init.d/$service enabled; then echo 1 > "$backup/$service.enabled"; else echo 0 > "$backup/$service.enabled"; fi
  if [ -x /etc/init.d/$service ] && /etc/init.d/$service running; then echo 1 > "$backup/$service.running"; else echo 0 > "$backup/$service.running"; fi
 done
@@ -27,8 +31,15 @@ cat > "$backup/paths" <<'PATHS'
 /www/luci-static/resources/f50powerradio25.js
 /usr/libexec/f50-lock
 /usr/libexec/f50-run-worker
+/usr/libexec/f50-diagnostics
+/usr/libexec/f50-diagnostics-worker
+/etc/init.d/f50-diagnostics
+/usr/libexec/f50-traffic-archive
+/usr/libexec/f50-traffic-export.uc
+/etc/init.d/f50-traffic-archive
 /usr/libexec/unisoc-modem/cell
 /www/luci-static/resources/view/mu300/home.js
+/www/luci-static/resources/mu300/common.js
 /usr/libexec/unisoc-modem/lock
 /usr/libexec/rpcd/mu300dash
 /usr/libexec/unisoc-modem/dashboard-info
@@ -44,6 +55,7 @@ cat > "$backup/paths" <<'PATHS'
 /usr/share/rpcd/acl.d/luci-app-f50channel.json
 /usr/share/rpcd/acl.d/luci-app-f50openclash.json
 /etc/config/f50quota
+/usr/sbin/vnstatd
 /etc/config/vnstat
 /etc/vnstat.conf
 /www/luci-static/resources/f50power.js
@@ -86,6 +98,7 @@ done < "$backup/paths"
 cp restore.sh "$backup/restore.sh"
 [ ! -x /etc/init.d/f50history ] || /etc/init.d/f50history stop
 /etc/init.d/vnstat stop
+sh f50-vnstat-counterfix.sh
 old_dir=$(vnstat --showconfig | awk '/^[;]?DatabaseDir / {gsub(/"/,"",$2); print $2; exit}')
 case "$old_dir" in /tmp*|/var*|'')
  mkdir -p /opt/vnstat
@@ -102,6 +115,7 @@ for setting in 'SaveInterval 5' 'MonthRotate 1' 'MonthlyMonths -1' 'DailyDays 36
  sed -i "/^[[:space:]]*$key[[:space:]]/d" /etc/vnstat.conf
  printf '%s\n' "$setting" >> /etc/vnstat.conf
 done
+sh f50-vnstat-reset-guard.sh
 uci -q show vnstat.@vnstat[0] >/dev/null || uci add vnstat vnstat >/dev/null
 if ! uci -q get vnstat.@vnstat[0].interface | tr ' ' '\n' | grep -qx sipa_eth0; then uci add_list vnstat.@vnstat[0].interface=sipa_eth0; fi
 uci commit vnstat
@@ -122,6 +136,12 @@ f50channel.js /www/luci-static/resources/f50channelstate.js
 f50power.js /www/luci-static/resources/f50powerradio25.js
 f50-lock /usr/libexec/f50-lock
 f50-run-worker /usr/libexec/f50-run-worker
+f50-diagnostics /usr/libexec/f50-diagnostics
+f50-diagnostics-worker /usr/libexec/f50-diagnostics-worker
+f50-diagnostics-init /etc/init.d/f50-diagnostics
+f50-traffic-archive /usr/libexec/f50-traffic-archive
+f50-traffic-export.uc /usr/libexec/f50-traffic-export.uc
+f50-traffic-archive-init /etc/init.d/f50-traffic-archive
 cell /usr/libexec/unisoc-modem/cell
 modem-lock /usr/libexec/unisoc-modem/lock
 mu300dash /usr/libexec/rpcd/mu300dash
@@ -158,6 +178,8 @@ f50-wifi-nondfs /usr/libexec/f50-wifi-nondfs
 f50-wifi-start-safe /usr/libexec/f50-wifi-start-safe
 FILES
 chmod 755 /usr/libexec/unisoc-modem/lock /usr/libexec/unisoc-modem/cell /usr/libexec/f50-run-worker /usr/libexec/rpcd/mu300dash
+chmod 755 /usr/libexec/f50-diagnostics /usr/libexec/f50-diagnostics-worker /etc/init.d/f50-diagnostics
+chmod 755 /usr/libexec/f50-traffic-archive /etc/init.d/f50-traffic-archive
 chmod 755 /usr/libexec/f50-wifi-nondfs /usr/libexec/f50-wifi-start-safe
 chmod 755 /usr/libexec/f50-bounded /usr/libexec/f50-wifi-guard /usr/libexec/f50-wifi-evaluate /etc/init.d/f50-wifi-guard /usr/libexec/f50-dns-guard /usr/libexec/f50-dns-health /etc/init.d/f50-dns-guard /usr/libexec/f50-lock
 sh apply-reliability.sh
@@ -184,6 +206,10 @@ rm -f /www/luci-static/resources/f50highrail.js /usr/libexec/rpcd/f50highrail /u
 /etc/init.d/f50-wifi-guard restart
 /etc/init.d/f50-dns-guard enable
 /etc/init.d/f50-dns-guard restart
+/etc/init.d/f50-diagnostics enable
+/etc/init.d/f50-diagnostics restart
+/etc/init.d/f50-traffic-archive enable
+/etc/init.d/f50-traffic-archive restart
 sync
 printf '安装完成；请重新登录并强制刷新首页。\n原页面和配置备份：%s\n恢复命令：sh %s/restore.sh\n' "$backup" "$backup"
 ubus call f50power status >/dev/null

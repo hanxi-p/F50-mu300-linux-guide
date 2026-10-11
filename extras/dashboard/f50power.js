@@ -3,28 +3,33 @@
 'require ui';
 'require baseclass';
 'require mu300.common as M';
-var get=rpc.declare({object:'f50power',method:'status'});
-var set=rpc.declare({object:'f50power',method:'set',params:['mode']});
+var get=rpc.declare({object:'f50power',method:'status',nobatch:true});
+var set=rpc.declare({object:'f50power',method:'set',params:['mode'],nobatch:true});
 var radioGet=rpc.declare({object:'mu300dash',method:'lock_get',nobatch:true,expect:{'':{}}});
 var radioSet=rpc.declare({object:'mu300dash',method:'lock_set',params:['kind','val'],nobatch:true,expect:{'':{}}});
 var SWITCH_ESTIMATE_S={ '4g':30, auto:30 };
 return baseclass.extend({mount:function(root){
  var btn=root.querySelector('#mud-btn-power'),nr=root.querySelector('#mud-btn-5g'),timer,radioTimer,disposed=false,waiting=false,deadline=0,targetMode='auto',lastError='',startedAt=0,startedCellTs=0,lastCellTs=0,accepted=false,checking=false,applied=false,powerTarget=null;
  nr.style.display='flex';nr.style.flexDirection='column';nr.style.alignItems='center';nr.style.justifyContent='center';nr.style.gap='2px';
- function paint(){if(disposed)return;nr.disabled=waiting;nr.dataset.switching=waiting?'true':'false';nr.dataset.targetMode=waiting?targetMode:'';
+ var externalBusy=false;
+ function remember(){try{sessionStorage.setItem('f50-radio-switch',JSON.stringify({target:targetMode,start:startedAt,cell:startedCellTs}));}catch(e){}}
+ try{var saved=JSON.parse(sessionStorage.getItem('f50-radio-switch'));if(saved && ['auto','4g'].indexOf(saved.target)>=0 && Date.now()-saved.start>=0 && Date.now()-saved.start<150000){waiting=true;accepted=true;targetMode=saved.target;startedAt=saved.start;startedCellTs=saved.cell;deadline=startedAt+SWITCH_ESTIMATE_S[targetMode]*1000;}}catch(e){}
+ nr.disabled=true;nr.textContent='制式 · 读取中…';
+ function paint(){if(disposed)return;nr.disabled=waiting||externalBusy;nr.dataset.switching=waiting?'true':'false';nr.dataset.targetMode=waiting?targetMode:'';
   var label=waiting?targetMode:nr.dataset.mode;
-  nr.textContent=waiting?('切换为'+(targetMode==='4g'?'4G':'5G')):(label==='4g'?'4G 模式':'自动 5G');
+  nr.textContent=waiting?('切换为'+(targetMode==='4g'?'4G':'5G')):externalBusy?'制式切换中…':(label==='4g'?'4G 模式':'自动 5G');
   var hint='';
   if(waiting){var left=Math.max(0,Math.ceil((deadline-Date.now())/1000));hint=left?'还需'+left+'秒':applied?'正在恢复网络…':'正在确认切换…';}
   if(waiting)nr.appendChild(E('small',{style:'display:block;font-size:10px;line-height:1.3;opacity:.85'},hint));
   nr.title='点击立即切换，预计需 30 秒；联网恢复后自动结束';
  }
 
- function stop(){waiting=false;clearTimeout(radioTimer);radioTimer=null;paint();}
+ function stop(){waiting=false;try{sessionStorage.removeItem('f50-radio-switch');}catch(e){}clearTimeout(radioTimer);radioTimer=null;paint();}
  function checkRadio(){if(disposed||checking)return Promise.resolve();checking=true;return radioGet().then(function(s){
   if(disposed)return;if(s.error)throw new Error(s.error);
   var label=s.mode && s.mode.label;lastCellTs=Number(s.cell_ts)||0;
-  nr.dataset.mode=label || 'auto';nr.setAttribute('aria-pressed',label==='4g'?'false':'true');
+  if(label!=='auto' && label!=='4g')throw new Error('制式状态尚未就绪');
+  externalBusy=!!s.applying;nr.dataset.mode=label;nr.classList.toggle('on',label==='auto');nr.setAttribute('aria-pressed',label==='4g'?'false':'true');
   if(waiting && accepted){
    if(!s.applying && s.apply_error){stop();ui.addNotification(null,E('p',{},s.apply_error));return;}
    applied=!s.applying && label===targetMode && Number(s.ts)>0;
@@ -47,12 +52,13 @@ return baseclass.extend({mount:function(root){
   if(!waiting)return checkRadio();
  });}
  btn.onclick=function(){btn.disabled=true;powerTarget=btn.dataset.mode==='eco'?'performance':'eco';btn.dataset.switching='true';btn.dataset.targetMode=powerTarget;btn.textContent=powerTarget==='performance'?'大核开启中':'大核关闭中';get().then(function(s){powerTarget=s.mode==='eco'?'performance':'eco';btn.dataset.targetMode=powerTarget;btn.textContent=powerTarget==='performance'?'大核开启中':'大核关闭中';return set(powerTarget);}).then(function(r){if(!r.ok)throw new Error(r.error);return refresh();}).catch(function(e){ui.addNotification(null,E('p',{},e.message));btn.disabled=false;btn.dataset.switching='false';btn.dataset.targetMode='';refresh().catch(function(){});});};
- nr.onclick=function(){if(waiting||disposed)return;targetMode=nr.dataset.mode==='4g'?'auto':'4g';waiting=true;accepted=false;applied=false;startedAt=Date.now();startedCellTs=lastCellTs;deadline=startedAt+SWITCH_ESTIMATE_S[targetMode]*1000;paint();
+ nr.onclick=function(){if(waiting||externalBusy||disposed)return;targetMode=nr.dataset.mode==='4g'?'auto':'4g';waiting=true;accepted=false;applied=false;startedAt=Date.now();startedCellTs=lastCellTs;deadline=startedAt+SWITCH_ESTIMATE_S[targetMode]*1000;paint();
   // Send now: the countdown estimates work already in progress, never delays it.
-  radioSet('mode',targetMode).then(function(r){if(disposed)return;if(!r.ok)throw new Error(M.errText(r));accepted=true;}).catch(function(e){if(disposed)return;stop();ui.addNotification(null,E('p',{},e.message));checkRadio().catch(function(){});});
+  radioSet('mode',targetMode).then(function(r){if(disposed||!waiting)return;if(!r.ok)throw new Error(M.errText(r));accepted=true;remember();}).catch(function(e){if(disposed)return;stop();ui.addNotification(null,E('p',{},e.message));checkRadio().catch(function(){});});
   radioTimer=setTimeout(radioLoop,1000);
  };
  function schedule(){if(disposed)return;timer=setTimeout(function(){if(!disposed && document.documentElement.contains(root))refresh().catch(function(){}).finally(schedule);},5000);}
  refresh().catch(function(e){ui.addNotification(null,E('p',{},e.message));}).finally(schedule);
+ if(waiting)radioTimer=setTimeout(radioLoop,1000);
  return function(){disposed=true;clearTimeout(timer);clearTimeout(radioTimer);};
 }});

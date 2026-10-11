@@ -2,27 +2,36 @@
 'require rpc';
 'require ui';
 'require baseclass';
-var status = rpc.declare({ object: 'f50openclash', method: 'status' });
-var setEnabled = rpc.declare({ object: 'f50openclash', method: 'set_enabled', params: ['enabled'] });
+var status = rpc.declare({ object: 'f50openclash', method: 'status', nobatch: true });
+var setEnabled = rpc.declare({ object: 'f50openclash', method: 'set_enabled', params: ['enabled'], nobatch: true });
+function boundedRequest(p) {
+    return new Promise(function(resolve, reject) {
+        var timer=setTimeout(function(){reject(new Error('状态请求超时，正在重试'));},8000);
+        p.then(function(v){clearTimeout(timer);resolve(v);},function(e){clearTimeout(timer);reject(e);});
+    });
+}
 return baseclass.extend({
     mount: function(root) {
         var button = root.querySelector('#mud-btn-openclash'), state, timer, disposed = false, pending = false, waiting = false, lastError = '';
         button.disabled = true;
+        button.textContent = 'OpenClash · 读取中…';
         function refresh() {
             if (disposed || pending) return Promise.resolve();
             pending = true;
-            return status().then(function(s) {
+            return boundedRequest(status()).then(function(s) {
+                if (disposed) return;
                 state = s;
                 button.className = 'mud-btn' + (s.running ? ' on' : '');
                 button.disabled = waiting || s.busy;
-                button.textContent = s.busy ? ('OpenClash · ' + (s.target === '1' ? '开启中…' : '关闭中…')) : 'OpenClash';
+                button.textContent = s.busy ? ('OpenClash · ' + (s.target === '1' ? '开启中…' : s.target === '0' ? '关闭中…' : '等待 DNS 切换…')) : 'OpenClash';
                 button.title = s.running ? '点击关闭 OpenClash，改为直连上网' : '点击开启 OpenClash';
                 button.setAttribute('aria-pressed', s.running ? 'true' : 'false');
                 if (s.error && s.error !== lastError) ui.addNotification(null, E('p', {}, s.error));
                 lastError = s.error || '';
-            }).catch(function() { button.disabled = true; button.textContent = 'OpenClash · 状态不可用'; }).finally(function() { pending = false; });
+            }).catch(function() { if(disposed)return; button.disabled = true; button.textContent = 'OpenClash · 状态重试中…'; }).finally(function() { pending = false; });
         }
         function schedule() {
+            if(disposed)return;
             timer = setTimeout(function() {
                 if (disposed || !document.documentElement.contains(root)) return;
                 refresh().finally(schedule);
@@ -31,10 +40,10 @@ return baseclass.extend({
         button.onclick = function() {
             if (!state || state.busy || waiting) return;
             waiting = true; button.disabled = true; button.textContent = 'OpenClash · 正在切换…';
-            setEnabled(!state.running).then(function(r) {
+            boundedRequest(setEnabled(!state.running)).then(function(r) {
                 if (!r.ok) throw new Error(r.error || '操作失败');
             }).catch(function(e) { ui.addNotification(null, E('p', {}, e.message)); }).finally(function() {
-                waiting = false; refresh();
+                waiting = false; if(!disposed)refresh();
             });
         };
         refresh().finally(schedule);

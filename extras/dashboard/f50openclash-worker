@@ -11,7 +11,7 @@ dns() { /usr/libexec/f50-dns-route "$1"; }
 case "$1" in
 1)
     uci set openclash.config.enable=1; uci commit openclash
-    /etc/init.d/openclash enable
+    /usr/libexec/f50-bounded 15 /etc/init.d/openclash enable || fail 'OpenClash 服务锁忙，请稍后重试'
     /usr/libexec/f50-bounded --keep-background 60 /etc/init.d/openclash start || fail 'OpenClash 启动命令失败'
     n=0
     while [ "$n" -lt 75 ]; do

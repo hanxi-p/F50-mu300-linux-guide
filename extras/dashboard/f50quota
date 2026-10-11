@@ -2,11 +2,20 @@
 . /usr/share/libubox/jshn.sh
 . /lib/functions.sh
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export TZ=CST-8
 fail() { json_init; json_add_boolean ok 0; json_add_string error "$1"; json_dump; }
+if [ "$1" = call ] && [ "$2" = configure ] && [ "${3:-}" != locked ]; then
+    if reply=$(/usr/libexec/f50-bounded 20 flock -n /tmp/f50quota-config.flock "$0" call configure locked); then
+        printf '%s\n' "$reply"
+    else
+        fail '流量设置忙或处理超时，请稍后重试'
+    fi
+    exit
+fi
 valid_number() { printf '%s' "$1" | grep -Eq '^[0-9]+([.][0-9]{1,3})?$' && awk -v v="$1" 'BEGIN {exit !(v>=0 && v<=1000000)}'; }
 raw_used() {
     local data keys k y m rx tx
-    data=$(vnstat --json m 0 -i sipa_eth0 2>/dev/null) || return 1
+    data=$(/usr/libexec/f50-bounded 5 vnstat --json m 0 -i sipa_eth0 2>/dev/null) || return 1
     json_load "$data" || return 1
     json_select interfaces; json_select 1; json_select traffic; json_select month
     json_get_keys keys
@@ -23,7 +32,7 @@ raw_used() {
     echo 0
 }
 case "$1" in
-list) echo '{"status":{},"configure":{"quota_gb":"String","used_gb":"String","calibrate":"Boolean"}}';;
+list) echo '{"status":{},"history":{},"configure":{"quota_gb":"String","used_gb":"String","calibrate":"Boolean"}}';;
 call)
     case "$2" in
     configure)
@@ -43,11 +52,17 @@ call)
         if uci -q commit f50quota; then json_init; json_add_boolean ok 1; json_dump; else fail '配置保存失败'; fi
         ;;
     status)
-        monthly=$(vnstat --json m 0 -i sipa_eth0 2>/dev/null) || { fail '流量数据库暂时不可用'; exit; }
-        daily=$(vnstat --json d 35 -i sipa_eth0 2>/dev/null)
+        monthly=$(/usr/libexec/f50-bounded 5 vnstat --json m 0 -i sipa_eth0 2>/dev/null) || { fail '流量数据库暂时不可用'; exit; }
+        daily=$(/usr/libexec/f50-bounded 5 vnstat --json d 100 -i sipa_eth0 2>/dev/null)
+        hourly=$(/usr/libexec/f50-bounded 5 vnstat --json h 2 -i sipa_eth0 2>/dev/null)
         quota=$(uci -q get f50quota.plan.quota_gb); quota=${quota:-0}
         json_init; json_add_boolean ok 1
         json_add_string month "$(date +%Y-%m)"
+        json_add_string today "$(date +%Y-%m-%d)"
+        hour=$(date +%H); hour=${hour#0}; json_add_int hour "${hour:-0}"
+        json_add_string timezone 'Asia/Shanghai'
+        json_add_string hourly_json "$hourly"
+        json_add_string suspect_before "$(uci -q get f50quota.plan.suspect_before)"
         json_add_double quota_gb "$quota"
         json_add_string monthly_json "$monthly"; json_add_string daily_json "$daily"
         json_add_object adjustments
@@ -58,6 +73,10 @@ call)
         }
         config_load f50quota; config_foreach add_adjustment usage
         json_close_object; json_dump
+        ;;
+    history)
+        data=$(cat /opt/f50-traffic-hours/hourly.json 2>/dev/null) || { fail '小时归档尚未生成，请稍后重试'; exit; }
+        json_init; json_add_boolean ok 1; json_add_string hourly_json "$data"; json_dump
         ;;
     *) fail '未知操作';;
     esac;;

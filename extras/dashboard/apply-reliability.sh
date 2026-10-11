@@ -2,6 +2,7 @@
 set -eu
 cd "$(dirname "$0")"
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/mu300/busybox-bin
+sh ./f50-neighbor-safe.sh
 header=/usr/share/ucode/luci/template/themes/aurora/header.ut
 loader=/usr/share/ucode/luci/template/header.ut
 boot=/etc/init.d/mu300-hw
@@ -18,6 +19,8 @@ if ! grep -q 'f50fast1' "$loader"; then
  grep -q 'pkgs_update_time }}' "$loader" || { echo 'LuCI loader 格式不同，请先适配'; exit 1; }
  sed -i 's/pkgs_update_time }}/pkgs_update_time }}-f50fast1/' "$loader"
 fi
+home_hash=$(sha256sum /www/luci-static/resources/view/mu300/home.js | cut -c1-12)
+sed -i "s/-f50fast1[^\"]*/-f50fast1-$home_hash/" "$loader"
 if ! grep -q '/usr/libexec/f50-wifi-start-safe' "$boot"; then
  grep -q '/opt/mu300/bin/openwrt-wifi-config' "$boot" || { echo '启动流程不同，请先适配'; exit 1; }
  awk '{print} /\/opt\/mu300\/bin\/openwrt-wifi-config/ {print "\t/usr/libexec/f50-wifi-start-safe >>/tmp/mu300-wifi-start.log 2>&1"}' "$boot" > "$boot.f50-new"

@@ -4,7 +4,7 @@
     "read": {
       "ubus": {
         "f50quota": [
-          "status"
+          "status", "history"
         ]
       }
     },
