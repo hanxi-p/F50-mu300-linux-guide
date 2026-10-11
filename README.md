@@ -201,6 +201,10 @@
 
 配套安装、测试与恢复脚本见 [extras/sms-email](extras/sms-email/README.md)。公开仓库不包含个人邮箱、授权码或短信内容。
 
+## 第十三章（可选）：故障修复与优化
+
+[故障修复与优化](docs/13-optional-repair-and-optimization.md) 汇总热点无法加入、DFS、后台刷新卡顿、插件开关与 DNS、制式切换、流量跳增、RPC 和日志的问题与措施，提供 Codex 检查入口、三层验收、回退方法及待排查项。每次更新按持续风险清单回归。
+
 ## Q&A
 
 遇到安装问题或需要增加功能时，进入 [Q&A：问题与解决方法](docs/08-troubleshooting.md)。首页美化见第十一章，其他可选功能见第十二章。

@@ -9,9 +9,19 @@ function amount(v) { return (Number(v || 0)/GB).toFixed(3)+' GB'; }
 function key(d) { return d.year+'-'+String(d.month).padStart(2,'0'); }
 function dayKey(d) { return key(d)+'-'+String(d.day).padStart(2,'0'); }
 function bytes(v) { return Number(v.rx || 0)+Number(v.tx || 0); }
+function grouped(rows, hour) {
+ var map={};
+ (Array.isArray(rows)?rows:[]).forEach(function(r){
+  if(!r||!r.date||!Number.isFinite(Number(r.rx))||!Number.isFinite(Number(r.tx))||Number(r.rx)<0||Number(r.tx)<0)return;
+  var k=hour?dayKey(r.date)+'-'+Number(r.time&&r.time.hour):r.date.day!=null?dayKey(r.date):key(r.date);
+  if(!map[k])map[k]={date:r.date,time:r.time,rx:0,tx:0};
+  map[k].rx+=Number(r.rx);map[k].tx+=Number(r.tx);
+ });
+ return Object.keys(map).map(function(k){return map[k];});
+}
 function compact(v) { return v>=GB?amount(v):v>=1000000?(v/1000000).toFixed(1)+' MB':v>=1000?(v/1000).toFixed(1)+' KB':Math.round(v)+' B'; }
 function dailySeries(data,count) {
- var rows=traffic(data.daily_json).traffic.day || [],map={};
+ var rows=grouped(traffic(data.daily_json).traffic.day),map={};
  rows.forEach(function(r){map[dayKey(r.date)]=r;});
  var end=Date.parse(data.today+'T00:00:00Z'),out=[];
  for(var i=count-1;i>=0;i--){var date=new Date(end-i*86400000).toISOString().slice(0,10),r=map[date];out.push({date:date,bytes:r?bytes(r):null,suspect:!!r&&!!data.suspect_before&&date<=data.suspect_before});}
@@ -41,7 +51,7 @@ return baseclass.extend({
   function render(data) {
    if (!data.ok) throw new Error(data.error || '读取失败');
    latest=data;
-   var months=traffic(data.monthly_json).traffic.month || [];
+   var months=grouped(traffic(data.monthly_json).traffic.month);
    var current=months.find(function(m){return key(m.date)===data.month;}) || {rx:0,tx:0};
    var adjustment=Number((data.adjustments || {})[data.month] || 0);
    var used=Math.max(0,Number(current.rx)+Number(current.tx)+adjustment);
@@ -56,8 +66,8 @@ return baseclass.extend({
    q('fill').style.background=percent>=100?'#d64c4c':percent>=80?'#dc9a23':'var(--primary,#2f7bf6)';
    q('bar').setAttribute('aria-valuenow',Math.min(100,percent).toFixed(2));
    var rx=root.querySelector('#mud-rx'),tx=root.querySelector('#mud-tx');
-   var hours=traffic(data.hourly_json).traffic.hour || [],h=hours.find(function(r){return dayKey(r.date)===data.today&&Number(r.time.hour)===Number(data.hour);});
-   var today=(traffic(data.daily_json).traffic.day || []).find(function(r){return dayKey(r.date)===data.today;});
+   var hours=grouped(traffic(data.hourly_json).traffic.hour,true),h=hours.find(function(r){return dayKey(r.date)===data.today&&Number(r.time.hour)===Number(data.hour);});
+   var today=grouped(traffic(data.daily_json).traffic.day).find(function(r){return dayKey(r.date)===data.today;});
    if(rx){rx.textContent=h?compact(bytes(h)):'0 B';rx.title=data.today+' '+String(data.hour).padStart(2,'0')+':00–'+String(Number(data.hour)+1).padStart(2,'0')+':00（北京时间，接收+发送）';}
    if(tx){var suspect=today&&data.suspect_before&&data.today<=data.suspect_before;tx.textContent=suspect?'—':today?compact(bytes(today)):'0 B';tx.title=suspect?'今日原始统计含历史异常跳增，不能推算真实用量。原始值 '+amount(bytes(today)):'今日 0 点至现在';}
    q('used').title=used.toLocaleString('zh-CN')+' 字节'+(adjustment?'（含手动校准）':'');
@@ -106,7 +116,7 @@ return baseclass.extend({
   section.querySelectorAll('[data-edit]').forEach(function(el){el.onclick=function(){edit(el.dataset.edit);};el.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();edit(el.dataset.edit);}};});
   q('month').onclick=function(){
    if(!latest)return;
-   var rows=(traffic(latest.monthly_json).traffic.month || []).slice().sort(function(a,b){return key(b.date).localeCompare(key(a.date));});
+   var rows=grouped(traffic(latest.monthly_json).traffic.month).sort(function(a,b){return key(b.date).localeCompare(key(a.date));});
    ui.showModal('月度历史',[
     E('table',{class:'mud-table'},[
      E('thead',{},E('tr',{},['月份','接收','发送','已用合计'].map(function(s){return E('th',{},s);}))),

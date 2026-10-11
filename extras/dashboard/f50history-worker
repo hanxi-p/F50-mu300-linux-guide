@@ -16,15 +16,23 @@ bounded() {
 D=/tmp/f50-dashboard-live
 mkdir -p "$D"; chmod 700 "$D"
 n=0
+previous_rx=''; previous_tx=''
 while :; do
  ts=$(date +%s)
- rx=$(cat /sys/class/net/sipa_eth0/statistics/rx_bytes 2>/dev/null || echo 0)
- tx=$(cat /sys/class/net/sipa_eth0/statistics/tx_bytes 2>/dev/null || echo 0)
+ rx=$(cat /sys/class/net/sipa_eth0/statistics/rx_bytes 2>/dev/null || true)
+ tx=$(cat /sys/class/net/sipa_eth0/statistics/tx_bytes 2>/dev/null || true)
+ case "$rx:$tx" in *[!0-9:]*|:*|*:) valid=0;; *) valid=1;; esac
+ if [ "$valid" = 1 ]; then
+ if [ -n "$previous_rx" ] && { [ "$rx" -lt "$previous_rx" ] || [ "$tx" -lt "$previous_tx" ]; }; then
+  logger -t f50-traffic-counter "counter decrease: rx $previous_rx->$rx tx $previous_tx->$tx; reset baseline, no rollover credit"
+ fi
+ previous_rx=$rx; previous_tx=$tx
  printf '%s %s %s\n' "$ts" "$rx" "$tx" >> "$D/samples"
  awk -v now="$ts" '$1>=now-300' "$D/samples" | tail -n 200 > "$D/samples.new"
  mv "$D/samples.new" "$D/samples"
  awk 'BEGIN{printf "["} NR>1 {dt=$1-t; if(dt>0){a=($2>=rx?($2-rx)/dt:0);b=($3>=tx?($3-tx)/dt:0);printf "%s[%s,%.3f,%.3f]",sep,$1,a,b;sep=","}} {t=$1;rx=$2;tx=$3} END{print "]"}' "$D/samples" > "$D/history.new"
  mv "$D/history.new" "$D/history.json"
+ fi
  if [ "$n" -eq 0 ] && { [ -z "$child" ] || ! kill -0 "$child" 2>/dev/null; }; then
   [ -z "$child" ] || wait "$child" 2>/dev/null || true
   /usr/libexec/f50-bounded 15 sh -c '

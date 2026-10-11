@@ -15,6 +15,7 @@ fi
 valid_number() { printf '%s' "$1" | grep -Eq '^[0-9]+([.][0-9]{1,3})?$' && awk -v v="$1" 'BEGIN {exit !(v>=0 && v<=1000000)}'; }
 raw_used() {
     local data keys k y m rx tx
+    local sum=0
     data=$(/usr/libexec/f50-bounded 5 vnstat --json m 0 -i sipa_eth0 2>/dev/null) || return 1
     json_load "$data" || return 1
     json_select interfaces; json_select 1; json_select traffic; json_select month
@@ -25,11 +26,11 @@ raw_used() {
         nowm=$(date +%m); nowm=${nowm#0}
         if [ "$y" = "$(date +%Y)" ] && [ "$m" = "$nowm" ]; then
             json_get_var rx rx; json_get_var tx tx
-            awk -v r="$rx" -v t="$tx" 'BEGIN {printf "%.0f",r+t}'; return 0
+            sum=$(awk -v s="$sum" -v r="$rx" -v t="$tx" 'BEGIN {printf "%.0f",s+r+t}')
         fi
         json_select ..
     done
-    echo 0
+    echo "$sum"
 }
 case "$1" in
 list) echo '{"status":{},"history":{},"configure":{"quota_gb":"String","used_gb":"String","calibrate":"Boolean"}}';;
@@ -53,8 +54,8 @@ call)
         ;;
     status)
         monthly=$(/usr/libexec/f50-bounded 5 vnstat --json m 0 -i sipa_eth0 2>/dev/null) || { fail '流量数据库暂时不可用'; exit; }
-        daily=$(/usr/libexec/f50-bounded 5 vnstat --json d 100 -i sipa_eth0 2>/dev/null)
-        hourly=$(/usr/libexec/f50-bounded 5 vnstat --json h 2 -i sipa_eth0 2>/dev/null)
+        daily=$(/usr/libexec/f50-bounded 5 vnstat --json d 100 -i sipa_eth0 2>/dev/null) || { fail '每日流量查询失败，请稍后重试'; exit; }
+        hourly=$(/usr/libexec/f50-bounded 5 vnstat --json h 24 -i sipa_eth0 2>/dev/null) || { fail '小时流量查询失败，请稍后重试'; exit; }
         quota=$(uci -q get f50quota.plan.quota_gb); quota=${quota:-0}
         json_init; json_add_boolean ok 1
         json_add_string month "$(date +%Y-%m)"

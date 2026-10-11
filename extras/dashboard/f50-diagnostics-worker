@@ -66,7 +66,13 @@ collect() {
    rm -f "$queue/system.fifo"
    mkfifo "$queue/system.fifo" || return 1
    logread -f > "$queue/system.fifo" & reader=$!
-   awk '/f50-|daemon\.(err|crit|alert|emerg)|Out of memory|oom-kill|segfault|kernel panic|BUG:|hung task|hostapd.*(fail|error)|rpcd.*(fail|error)|unisoc-modem.*(fail|error|timeout)/ { print; fflush(); }' < "$queue/system.fifo" >> "$day/system.log" & filter=$!
+   # Preserve a bounded kernel crash context, including register/stack lines.
+   awk '
+    /coredump|Comm: rpcd|segfault|kernel panic|BUG:|hung task|Call trace:/ { context=96 }
+    { keep=($0 ~ /f50-|daemon\.(err|crit|alert|emerg)|Out of memory|oom-kill|segfault|kernel panic|BUG:|hung task|coredump|Comm: rpcd|hostapd.*(fail|error)|rpcd.*(fail|error)|unisoc-modem.*(fail|error|timeout)/);
+      if (context>0 && $0 ~ /kernel:/) { keep=1; context-- }
+      if (keep) { print; fflush(); }
+    }' < "$queue/system.fifo" >> "$day/system.log" & filter=$!
   fi
   active=$day
  fi

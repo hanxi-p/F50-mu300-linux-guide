@@ -8,8 +8,8 @@ trap '/usr/libexec/f50-lock release "$LOCK" $$; /usr/libexec/f50-lock release /t
 trap 'exit 1' INT TERM
 case "$1" in
 1) /etc/init.d/adguardhome enable; /usr/libexec/f50-bounded 45 /etc/init.d/adguardhome start
- n=0; until pidof AdGuardHome >/dev/null; do n=$((n+1)); [ "$n" -lt 15 ] || { echo 'AdGuard Home Æô¶¯Ê§°Ü' > /tmp/f50adguard-error; exit 1; }; sleep 1; done
+ n=0; until pidof AdGuardHome >/dev/null; do n=$((n+1)); [ "$n" -lt 15 ] || { echo 'AdGuard Home å¯åŠ¨å¤±è´¥' > /tmp/f50adguard-error; exit 1; }; sleep 1; done
  sleep 2;;
 0) /usr/libexec/f50-dns-route auto off; /etc/init.d/adguardhome disable; /usr/libexec/f50-bounded 45 /etc/init.d/adguardhome stop;;
 esac
-if [ "$1" = 0 ]; then /usr/libexec/f50-dns-route auto off; else /usr/libexec/f50-dns-route auto; fi || { echo 'DNS Áª¶¯Ê§°Ü£¬Çë¼ì²é·þÎñ' > /tmp/f50adguard-error; exit 1; }
+if [ "$1" = 0 ]; then /usr/libexec/f50-dns-route auto off; else /usr/libexec/f50-dns-route auto; fi || { echo 'DNS è”åŠ¨å¤±è´¥ï¼Œè¯·æ£€æŸ¥æœåŠ¡' > /tmp/f50adguard-error; exit 1; }

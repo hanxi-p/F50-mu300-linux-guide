@@ -18,6 +18,19 @@ valid_mac() {
  first=${1%%:*}
  [ $((0x$first & 1)) -eq 0 ]
 }
+# Boot verification must not tear down an AP that netifd already brought up.
+# Explicit recovery/install calls without this flag retain their old behavior.
+if [ "${1:-}" = --if-needed ]; then
+ ap=$(/usr/libexec/f50-bounded 5 ubus call hostapd.wlan0 get_status 2>/dev/null)
+ ap_state=$(printf '%s\n' "$ap" | jsonfilter -e '@.status')
+ ap_mac=$(printf '%s\n' "$ap" | jsonfilter -e '@.bssid')
+ pending=$(/usr/libexec/f50-bounded 5 ubus call network.wireless status 2>/dev/null | jsonfilter -e '@.radio0.pending')
+ if [ "$ap_state" = ENABLED ] && valid_mac "$ap_mac" && [ "$pending" = false ] &&
+    /usr/libexec/f50-bounded 5 ip link show wlan0 2>/dev/null | grep -q LOWER_UP; then
+  logger -t f50-wifi-start 'AP already healthy; boot verification skipped restart'
+  exit 0
+ fi
+fi
 configured_mac=$(uci -q get wireless.ap0.macaddr)
 if ! valid_mac "$configured_mac"; then
  actual_mac=$(cat /sys/class/net/wlan0/address 2>/dev/null)

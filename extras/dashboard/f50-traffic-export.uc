@@ -7,12 +7,17 @@ if (type(rows) != 'array') die('Invalid hourly dataset');
 fs.mkdir(root,0700);
 let days={};
 for (let row in rows) {
- let d=row.date, h=row.time?.hour;
- if (!d || h < 0 || h > 23 || row.rx < 0 || row.tx < 0) continue;
+ let d=row?.date, h=row?.time?.hour;
+ if (type(row) != 'object' || type(d) != 'object' || type(h) != 'int' || h < 0 || h > 23 ||
+     type(d.year) != 'int' || d.year < 2025 || type(d.month) != 'int' || d.month < 1 || d.month > 12 ||
+     type(d.day) != 'int' || d.day < 1 || d.day > 31 ||
+     type(row.rx) != 'int' || type(row.tx) != 'int' || row.rx < 0 || row.tx < 0) die('Invalid hourly row');
  let day=sprintf('%04d-%02d-%02d',d.year,d.month,d.day);
  if (!match(day,/^\d{4}-\d{2}-\d{2}$/)) continue;
  days[day] ||= {};
- days[day][sprintf('%02d',h)]=row;
+ let k=sprintf('%02d',h);
+ days[day][k] ||= {rx:0,tx:0};
+ days[day][k].rx += row.rx; days[day][k].tx += row.tx;
 }
 for (let day, hours in days) {
  let body='date,hour_beijing,received_bytes,sent_bytes,total_bytes\n';
