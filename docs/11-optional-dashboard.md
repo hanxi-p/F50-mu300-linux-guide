@@ -265,3 +265,5 @@ tail -n 100 /opt/f50-diagnostics/$(date +%Y-%m-%d)/events.log
 ```
 
 需要关闭记录时执行 `/etc/init.d/f50-diagnostics stop`，再执行 `/etc/init.d/f50-diagnostics disable`；已有归档保留。诊断原文可能包含手机号、网络地址等私密信息，分享前先脱敏。
+
+后续维护见[第十三章：故障修复与优化](13-optional-repair-and-optimization.md)，包括问题对应措施、版本边界、三层回归与恢复入口。
