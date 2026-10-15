@@ -188,20 +188,19 @@
 
 详细步骤：[安装后优化：密码、SSH、后台、性能、管理与备份](docs/10a-post-install-optimization.md)。
 
-## 第十一章及之后：面板与功能扩展已独立维护
+## 面板与功能扩展已独立维护
 
 刷好系统后，进入 **[F50 OpenWrt 面板与功能扩展](https://github.com/hanxi-p/F50-OpenWrt-Dashboard)**：
 
-- [第十一章：页面美化与流量套餐面板](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/install.md)：实时双曲线、今日峰值、套餐与历史、CPU/温度、六个快捷控制。
-- [第十二章：其他可选功能](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/sms-email.md)：短信邮件、代理与过滤配置入口。
-- [第十三章：故障修复与优化](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/troubleshooting.md)：DNS、热点、超时、互斥、流量与历史风险。
+- [页面美化与流量套餐面板](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/install.md)：实时双曲线、今日峰值、套餐与历史、CPU/温度、六个快捷控制。
+- [其他可选功能](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/sms-email.md)：短信邮件、代理与过滤配置入口。
+- [故障修复与优化](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/troubleshooting.md)：DNS、热点、超时、互斥、流量与历史风险。
 - [日志、报错与维护](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/operations.md)：每分钟流量记录、两类各5GB日志、诊断和恢复。
 
-本仓库继续维护前十章的刷机主线；第11–13章旧地址保留为迁移入口，完整配套代码与截图到新仓库获取。
 
 ## Q&A
 
-遇到安装问题或需要增加功能时，进入 [Q&A：问题与解决方法](docs/08-troubleshooting.md)。首页美化见第十一章，其他可选功能见第十二章。
+遇到安装问题或需要增加功能时，进入 [Q&A：问题与解决方法](docs/08-troubleshooting.md)。
 
 ## 项目与更新地址
 
