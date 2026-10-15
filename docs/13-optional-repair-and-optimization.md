@@ -2,7 +2,7 @@
 
 本章已迁移到独立仓库 **[F50 OpenWrt 面板与功能扩展](https://github.com/hanxi-p/F50-OpenWrt-Dashboard)**。
 
-- [打开本章完整内容](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/13-optional-repair-and-optimization.md)
+- [打开本章完整内容](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/troubleshooting.md)
 - [功能展示与安装入口](https://github.com/hanxi-p/F50-OpenWrt-Dashboard#功能一览)
 - [配套文件与校验](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/tree/main/extras)
 

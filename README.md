@@ -192,9 +192,9 @@
 
 刷好系统后，进入 **[F50 OpenWrt 面板与功能扩展](https://github.com/hanxi-p/F50-OpenWrt-Dashboard)**：
 
-- [第十一章：页面美化与流量套餐面板](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/11-optional-dashboard.md)：实时双曲线、今日峰值、套餐与历史、CPU/温度、六个快捷控制。
-- [第十二章：其他可选功能](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/12-optional-features.md)：短信邮件、代理与过滤配置入口。
-- [第十三章：故障修复与优化](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/13-optional-repair-and-optimization.md)：DNS、热点、超时、互斥、流量与历史风险。
+- [第十一章：页面美化与流量套餐面板](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/install.md)：实时双曲线、今日峰值、套餐与历史、CPU/温度、六个快捷控制。
+- [第十二章：其他可选功能](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/sms-email.md)：短信邮件、代理与过滤配置入口。
+- [第十三章：故障修复与优化](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/troubleshooting.md)：DNS、热点、超时、互斥、流量与历史风险。
 - [日志、报错与维护](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/operations.md)：每分钟流量记录、两类各5GB日志、诊断和恢复。
 
 本仓库继续维护前十章的刷机主线；第11–13章旧地址保留为迁移入口，完整配套代码与截图到新仓库获取。
