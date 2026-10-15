@@ -1,5 +1,7 @@
 # 作者与项目链接
 
+面板与功能扩展的代码、文档及后续署名维护已迁至 [F50-OpenWrt-Dashboard](https://github.com/hanxi-p/F50-OpenWrt-Dashboard)。原刷机指南继续保留基础系统与安装工具的来源说明。
+
 这份实操指北由 [hanxi-p](https://github.com/hanxi-p) 整理，核心能力由下列项目提供。感谢作者们提供安装器、驱动、解锁与系统集成能力。
 
 | 用途 | 作者 / 项目 |

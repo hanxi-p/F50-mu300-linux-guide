@@ -1,1 +1,0 @@
-{"luci-app-f50history":{"description":"Dashboard background history","read":{"ubus":{"f50history":["status"]}}}}

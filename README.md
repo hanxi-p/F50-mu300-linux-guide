@@ -188,22 +188,16 @@
 
 详细步骤：[安装后优化：密码、SSH、后台、性能、管理与备份](docs/10a-post-install-optimization.md)。
 
-## 第十一章（可选）：页面美化与流量套餐面板
+## 第十一章及之后：面板与功能扩展已独立维护
 
-安装完成后，可以按需增加 [页面美化与流量套餐面板](docs/11-optional-dashboard.md)：大字号上下行速率、后台持续采集的双曲线与状态概况、本次 / 本月用量、可编辑套餐进度、按需展开的八核心负载、四传感器温度和六个快捷控制（流量、性能 / 能效、4G / 自动 5G、OpenClash、重启设备、更多设置）。登录会话延长至 2 小时。章节提供 Codex 提示词、配套脚本、手机效果图、验收和恢复方法。
+刷好系统后，进入 **[F50 OpenWrt 面板与功能扩展](https://github.com/hanxi-p/F50-OpenWrt-Dashboard)**：
 
-## 第十二章（可选）：其他可选功能
+- [第十一章：页面美化与流量套餐面板](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/11-optional-dashboard.md)：实时双曲线、今日峰值、套餐与历史、CPU/温度、六个快捷控制。
+- [第十二章：其他可选功能](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/12-optional-features.md)：短信邮件、代理与过滤配置入口。
+- [第十三章：故障修复与优化](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/13-optional-repair-and-optimization.md)：DNS、热点、超时、互斥、流量与历史风险。
+- [日志、报错与维护](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/operations.md)：每分钟流量记录、两类各5GB日志、诊断和恢复。
 
-按需求扩展已经装好的 F50。先从 [其他可选功能](docs/12-optional-features.md) 选择功能，再让 Codex 配置；不影响前十章的安装交付。
-
-- **短信转发到邮件：** 使用自己的 SMTP 邮箱，新短信入队后自动发送；断网保留队列、联网重试，支持 hello 测试和恢复原配置。
-- **代理、广告过滤与其他扩展：** 从本章进入对应 Q&A，按自己的配置安装和检查。
-
-配套安装、测试与恢复脚本见 [extras/sms-email](extras/sms-email/README.md)。公开仓库不包含个人邮箱、授权码或短信内容。
-
-## 第十三章（可选）：故障修复与优化
-
-[故障修复与优化](docs/13-optional-repair-and-optimization.md) 汇总热点无法加入、DFS、后台刷新卡顿、插件开关与 DNS、制式切换、流量跳增、RPC 和日志的问题与措施，提供 Codex 检查入口、三层验收、回退方法及待排查项。每次更新按持续风险清单回归。
+本仓库继续维护前十章的刷机主线；第11–13章旧地址保留为迁移入口，完整配套代码与截图到新仓库获取。
 
 ## Q&A
 
