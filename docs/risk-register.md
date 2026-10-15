@@ -161,6 +161,8 @@
 
 以下脚本位于维护者电脑的 `tools/`，不是公开仓库通用安装命令；执行前阅读脚本与环境要求。
 
+R75（P2，2026-10-15）：公开说明以使用者可选功能为主体，个人名单/密钥/SMTP/订阅/实际配置仅保存到使用者私有材料；功能与配置数据分别说明。详细修正与验收见[新仓库风险清单](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/risk-register.md)。
+
 R74（2026-10-15）：拆分面板仓库核对旧11–13章入口、完整负载与许可、相对链接、设备SHA和定向配置边界。本地包校验、56设备映射与三轮只读健康通过；后续见[新仓库风险清单](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/risk-register.md)。新设备安装与真实开关本轮未测，不能把文档拆分视为全局稳定性通过。
 
 - `test-weak-signal-faults.sh`：AT 忙、采样独立、遥测退避、查询失败和异步启动。
