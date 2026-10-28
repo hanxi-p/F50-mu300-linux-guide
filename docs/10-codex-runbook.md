@@ -8,8 +8,8 @@
 |---|---|
 | 目标设备 | 通过 USB 实际枚举与 Android 属性识别 F50 / MU300 |
 | 系统存储 | SD 卡；节点、容量与分区表从设备检查获取 |
-| 用户数据 | 降级擦除 userdata；用户已另存所需文件并授权该操作 |
-| SD 数据 | 使用者授权格式化核对后的目标卡 |
+| 用户数据 | 仅首次安装所需降级会擦除 userdata；执行前核对使用者已另存文件并授权该动作 |
+| SD 数据 | 仅首次安装所需格式化，核对目标卡与授权；已有系统维护保留数据 |
 | 系统方案 | B09 Android 槽 a；厂商 5.4、openwrt-luci、Linux 槽 b、默认 Linux |
 | 网络 | 电脑网线走主路由；F50 USB / Wi-Fi 管理 |
 | SIM 卡 | 蜂窝验证使用已开通数据业务、有少量剩余流量的卡；断电插入。无卡时记录蜂窝验证待完成 |
@@ -67,10 +67,10 @@ ubus call network.interface.wan status
 | B09 已正常启动、BL 锁定 | 保留 / 补齐备份 → 配套解锁 |
 | B09 已 unlocked、无 root | 官方 Magisk Root |
 | B09 unlocked 且 su uid=0 | 安装器 Check → SD 安装 |
-| SD OpenWrt 已正常运行 | 管理配置 → 核对 → 备份交付 |
+| SD OpenWrt 已正常运行 | 按上游修正与更新入口识别版本和定制 → 按需修复 / 补齐配置 → 核对 → 备份交付 |
 | 只有 Fastboot / BootROM | 先识别分区与已有恢复材料，按 Q&A 恢复到可确定状态 |
 
-枚举有多个设备时，使用实际 serial 选择目标，ADB / Fastboot 命令附 `-s`。用户已运行正常 OpenWrt 时，保留该系统配置，不为了重复教程从降级重新开始。
+枚举有多个设备时，使用实际 serial 选择目标，ADB / Fastboot 命令附 `-s`。用户已运行正常 OpenWrt 时，保留该系统配置，不为了重复教程从降级重新开始；先读[已安装设备维护流程](10b-upstream-review-and-update.md)，不把首次安装的默认配置重新应用到设备。
 
 ## 10.3 本地材料与阶段记录
 
@@ -146,7 +146,7 @@ ubus call network.interface.wan status
 
 执行 [第 5 章](05-network-and-management.md)、[第 7 章](07-backup-and-restore.md) 与 [核对表](09-checklist.md)。
 
-安装完成后，按 [安装后优化](10a-post-install-optimization.md) 先完成固定版本的系统组件修补与验收，再集中设置密码、SSH 密钥、后台、无线与 DHCP，保存 balanced 动态调频和开机应用，整理时间、软件源、流量管理入口及最终备份。已安装 OpenWrt 的设备直接从管理与优化阶段续接。
+首次安装完成后，按 [安装后优化](10a-post-install-optimization.md) 核对固定版本的系统组件修补与验收，再集中设置密码、SSH 密钥、后台、无线与 DHCP，保存 balanced 动态调频和开机应用，整理时间、软件源、流量管理入口及最终备份。已安装 OpenWrt 的设备从[维护流程](10b-upstream-review-and-update.md)续接，保留自己的配置与性能模式，仅补齐需要的项目；旧配套修补不自动覆盖已有定制或更新版本。
 
 Wi-Fi 名称、管理端口、时间、软件源与系统更新的日常配置见 [扫尾配置](05b-daily-management.md)，依据用户需求设置；Wi-Fi 地区、总流量 / 月流量统计与调优由 Q&A 进入。
 

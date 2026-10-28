@@ -2,6 +2,8 @@
 
 用于本指南固定的 **v2026.10.11 OpenWrt 基础系统 + 厂商 5.4 内核**。提供本机实际合入的系统组件，首页美化与短信邮件转发分别安装。
 
+这是固定历史版本的配套负载。已经定制的设备先按[维护流程](../../docs/10b-upstream-review-and-update.md)比较现用文件；`--check` 通过不能证明不会覆盖后续修复。新版系统不安装本目录的旧 updater、启动工具或其他组件。安装器会保存关闭 fw4 软件 / 硬件 flow offloading 的配置，用于该旧基线的兼容处理；它不等同于关闭厂商 SIPA，也不是流量统计的必要操作。维护现有设备时不能为统计功能运行本包来修改加速配置。
+
 来源：[dikeckaan/mu300-linux](https://github.com/dikeckaan/mu300-linux)，上游提交 `52093b28c9c3e0280b1a1be6f0d4b5437a6053a1` 的相关组件，另加本指南的互斥和进程清理修补。许可见 [LICENSE](LICENSE)。组件来源与哈希见仓库 `versions.json` 和本目录 `SHA256SUMS`。
 
 包含：

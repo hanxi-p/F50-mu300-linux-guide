@@ -1,10 +1,38 @@
 {
-  "guide_date": "2026-10-10",
+  "guide_date": "2026-10-28",
   "tested_device": "ZTE F50 / MU300, original B15 slot b, retained B09 slot a",
   "upstream": {
     "repo": "https://github.com/dikeckaan/mu300-linux",
     "commit": "aff105fa3ed9f4b6add2e8d91ef1cf2d63cee92b",
     "release": "v2026.10.11"
+  },
+  "upstream_review": {
+    "review_date": "2026-10-28",
+    "release": "v2026.10.27.2",
+    "commit": "fa7bd593c5da6bf7963164e5a274253c4705960f",
+    "published_at": "2026-10-27T17:21:48Z",
+    "status": "reviewed_not_device_upgrade_tested",
+    "openwrt": "25.12.6",
+    "kernel_series": "5.4.254",
+    "release_url": "https://github.com/dikeckaan/mu300-linux/releases/tag/v2026.10.27.2",
+    "asset_digest_source": "GitHub release API metadata; not a local payload hash or a verified release signature",
+    "assets": [
+      {
+        "name": "mu300-kernel.tar.gz",
+        "sha256": "6dc27c7ed31ad88609f12b0b61edfa0ef7c6eef746f1693ccb08d8178cde2d52"
+      },
+      {
+        "name": "mu300-openwrt-luci-rootfs.tar.gz",
+        "sha256": "925c3e465d5fa35a995e6c84fc548e3ecf596e7ee8779b54fbe7ceb8b21dffb0"
+      }
+    ],
+    "fix_references": [
+      "https://github.com/dikeckaan/mu300-linux/pull/411",
+      "https://github.com/dikeckaan/mu300-linux/commit/6d2796e6aaf37ca80c27918864628be63011ae15",
+      "https://github.com/dikeckaan/mu300-linux/commit/042d1039083aab4513bf9713b5b7712dead56cce",
+      "https://github.com/dikeckaan/mu300-linux/pull/401"
+    ],
+    "runbook": "docs/10b-upstream-review-and-update.md"
   },
   "runtime": {
     "openwrt": "25.12.5",

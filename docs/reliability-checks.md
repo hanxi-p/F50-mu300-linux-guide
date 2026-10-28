@@ -4,6 +4,8 @@
 
 ## 按顺序部署
 
+以下顺序用于固定基线的首次安装。已有系统先走[维护流程](10b-upstream-review-and-update.md)，保留配置与历史；系统组件有更新或定制时先比较，不重复覆盖。候选发行版的文档审阅不等于设备升级验收。
+
 1. 前十章：准备 → 原始备份 → B09 → 解锁 → Root → SD 安装 → 管理配置与切换。
 2. [安装后优化](10a-post-install-optimization.md)：核对并部署 [系统组件修补](../extras/system-reliability/README.md)，再完成密码、SSH、无线、时间、软件源与备份。
 3. 按需部署 [首页扩展](11-optional-dashboard.md) 或 [短信邮件](12-optional-features.md)，核对各自依赖、哈希与恢复入口。

@@ -123,19 +123,16 @@ apk add --simulate vnstat2
 
 ## 6. MU300 系统更新
 
-软件包索引刷新和整套系统升级是两个入口。MU300 的 rootfs / kernel / boot 更新使用作者工具；先完整备份，阅读目标 Release，再检查更新：
+软件包索引刷新和整套系统升级是两个入口。MU300 的 rootfs / kernel / boot 更新使用作者工具；已有设备先读[上游修正与更新](10b-upstream-review-and-update.md)，识别当前版本、定制与更新范围，完整备份后检查：
 
 ```sh
 mu300-update check
+mu300-update --help
 ```
 
-决定升级后，按 [作者更新说明](https://github.com/dikeckaan/mu300-linux#readme) 使用：
+`check` 用于查询，不代表选择或批准升级。先固定目标 release，比较现用 updater 与该版本的参数和互斥 / 回退逻辑，再按维护流程执行匹配的更新路径。裸 `apply` 可能更新所有已安装系统及 kernel / boot，不能当作仅更新面板；新版保留用户文件的机制也不能替代面板、认证与流量历史的兼容性检查。
 
-```sh
-mu300-update apply
-```
-
-完成后按工具提示重启，重新核对 SD 根、管理地址、Wi-Fi、蜂窝与所装扩展。作者提供 `mu300-update rollback` 与 `rollback-boot` 对应系统 / 启动回退，先看当前版本帮助再使用。默认部署固定本文版本，系统升级作为后续维护动作；不通过批量 `apk upgrade` 代替 MU300 的启动系统更新。
+完成后按工具提示重启，重新核对 SD 根、管理地址、Wi-Fi、蜂窝、扩展和保留数据。作者提供 `mu300-update rollback` 与 `rollback-boot` 对应系统 / 启动回退，先看当前版本帮助并保存匹配模块，再使用；验收前保留旧系统副本。默认安装基线保持固定，候选版审阅信息另记；不通过批量 `apk upgrade` 代替 MU300 的启动系统更新。
 
 ## 7. 可选配置入口
 
