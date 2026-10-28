@@ -323,3 +323,15 @@ vnStat 2.13 的自动检测模式存在 Linux 下误判 32 位计数器的已知
 ## 短信转发到邮件
 
 准备、配套文件、hello 测试和邮件故障排查见 [第十二章：其他可选功能](12-optional-features.md#2-短信转发到邮件)。
+
+## 设备名变成新MAC、流量被拆成两行
+
+先核对客户端当前Wi-Fi私有地址，IP改变本身不应创建新MAC身份；不能凭主机名或厂商相同自动认定同一台设备。确认后使用[设备归属映射](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/features/device-traffic.md)合并展示，原始字节基线分别保留；免密名单独立核验并迁移指定条目。禁止把历史总量重新加到当前原始采样值。
+
+## Bark通知过一段时间消失，或推送影响原邮件
+
+检查isArchive和ttl：保存历史可用isArchive=1，ttl=600会使已保存消息10分钟后过期；需要保留时不附ttl。多渠道应独立队列、业务响应检查和确认标记，邮件继续使用原服务。见[双通道通知](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/features/push-notifications.md)。凭据和收件人不写入指南。
+
+## charger-manager仍提示电池过热/过冷
+
+核对实际供电、FGU/NTC温度、SoC温度、驱动保护状态和重启原因，不能把F50无内置电池当作可以写假温度或关闭保护的依据。当前维护验证仍观察到该警告，保留待定位；EDMA full/backpressure与硬发送失败分别检查，不用整体静音内核日志来表示已修复。

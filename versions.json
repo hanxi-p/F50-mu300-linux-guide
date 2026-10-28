@@ -11,11 +11,11 @@
     "release": "v2026.10.27.2",
     "commit": "fa7bd593c5da6bf7963164e5a274253c4705960f",
     "published_at": "2026-10-27T17:21:48Z",
-    "status": "reviewed_not_device_upgrade_tested",
+    "status": "kernel_maintenance_accepted_rootfs_upgrade_unverified",
     "openwrt": "25.12.6",
     "kernel_series": "5.4.254",
     "release_url": "https://github.com/dikeckaan/mu300-linux/releases/tag/v2026.10.27.2",
-    "asset_digest_source": "GitHub release API metadata; not a local payload hash or a verified release signature",
+    "asset_digest_source": "Kernel bundle downloaded and pinned release signature/hash verified during limited maintenance; rootfs digest remains upstream release metadata only",
     "assets": [
       {
         "name": "mu300-kernel.tar.gz",
@@ -32,7 +32,16 @@
       "https://github.com/dikeckaan/mu300-linux/commit/042d1039083aab4513bf9713b5b7712dead56cce",
       "https://github.com/dikeckaan/mu300-linux/pull/401"
     ],
-    "runbook": "docs/10b-upstream-review-and-update.md"
+    "runbook": "docs/10b-upstream-review-and-update.md",
+    "device_acceptance": {
+      "date": "2026-10-28",
+      "scope": "Official 5.4 kernel and companion module base with separately rebuilt WLAN source fixes; original v2026.10.11 rootfs retained",
+      "kernel_release": "5.4.254-gb50db5b6224c",
+      "wireless_sha256": "48026a7f7176ce2cf2f7200f2c0f5100a5405e3239b9b14fcbe360fad252d721",
+      "rootfs_upgrade_tested": false,
+      "review": "docs/reviews/2026-10-28-maintenance-acceptance.md",
+      "artifact_hash_is_build_specific": true
+    }
   },
   "runtime": {
     "openwrt": "25.12.5",
