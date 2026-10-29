@@ -279,3 +279,5 @@ R62/R71：补齐wdev安全标签跟踪与持久日志前缀，本轮helper前向
 三层记录及证据在本机reviews/deep-traffic-20261015/review.md、wifi-up-report.json、wifi-real-three-rounds.json、counter-audit-fixtures.json、counter-audit-deployment.json、final-health.json。最终三轮DNS/AP/插件非busy/USB真实HTTP与持久trace通过；无会话curl403被测试误判两次，修正Cookie测试后通过；未重复插件组合与制式往返，不宣称全部历史故障已修复。回退配置及归档原件/root/f50-counter-audit-backup-20261015，已知可用无线脚本mac80211-known-working.sh同目录；失败版备份不得作为已知可用回退。同步本地安装负载和清单，未公开推送或全量备份，另一个checkout未动。
 
 R83（P2，2026-10-29）：大流量时的CPU升高、load average和不同路径测速易混淆。第十一章增加按需内网与国内／国外检测入口，区分HTTP吞吐、ICMP和代理HTTPS，说明Fake-IP、超时／预算、非周期执行及不改加速；实机与隔离验证见扩展仓库R101，私人测速数据不作为公共性能保证。
+
+R84（P2，2026-10-29）：OpenClash升级需保留custom、DNS链与订阅／恢复钩子，缺失自动任务字段不可直接作整数比较。官方插件0.48.002、离线预检／私人备份／定向适配／三轮联网，核心不连带更新；USB启动基线和运行缓存字段变化分别核对，详见扩展仓库R102。

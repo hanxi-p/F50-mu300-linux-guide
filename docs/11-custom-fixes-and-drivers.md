@@ -71,7 +71,8 @@ EDMA 是无线 PCIe 数据搬运路径的一部分，发送暂存队列保存等
 | 统计显示 | 速率 B/s 使用整数，K/s、M/s、G/s 及流量 M/G 保留两位；显示舍入不改写账本或校准值 |
 | DNS 与线路恢复 | 有界探测、连续失败确认、互斥与冷却；实际故障后换线，保持可用现用线路，周期检测不等于周期切换 |
 | 通知 | 新短信和设备故障/恢复使用 Bark / WxPusher；节点变化仅发 Bark，接收后十分钟过期，解析实际节点并保留基线/编号去重。普通 WAN/DNS 中断不当设备故障，原短信邮件继续运行 |
-| 按需测速 | 快捷控制首排下方提供内网／国内／国外三个按钮，下方小字显示结果；内网为当前终端与F50的HTTP双向吞吐，国内／国外分别测百度／谷歌的ping和HTTPS。虚拟IP不当真实ICMP，测试有大小／超时限制，不周期运行、不改加速；见[功能说明](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/features/network-test.md) |
+| OpenClash 插件升级 | 先备份及simulate，保留custom、订阅与恢复钩子，重新适配DNS顺序；核对缺失自动任务字段默认值，插件和Mihomo核心分别管理。见[升级记录](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/reviews/2026-10-29-openclash-upgrade.md) |
+| 按需测速 | 更多设置所在行的下一排提供三个蓝色测速按钮，运行时变绿、结果替换标签；内网为当前终端与F50的HTTP双向吞吐，国内／国外分别测百度／谷歌的ping。虚拟IP不当真实ICMP，测试有大小／超时限制，不周期运行、不改加速；见[功能说明](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/features/network-test.md) |
 | 手机与宽屏面板 | 速率/流量上下排布、名称展示、表格对齐、触摸查看曲线和折叠入口分别适配；界面更新保留已有统计与滚动状态 |
 
 按需选择[面板功能](https://github.com/hanxi-p/F50-OpenWrt-Dashboard#功能目录)，个人节点、免密设备、收件人和密钥只保存到私有配置。本章不把某台设备的配置作为所有 F50 的安装默认值。
