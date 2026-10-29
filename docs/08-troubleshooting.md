@@ -343,3 +343,5 @@ vnStat 2.13 的自动检测模式存在 Linux 下误判 32 位计数器的已知
 ### 切换代理节点可以通知吗？
 
 可选[节点切换通知](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/features/push-notifications.md)会解析主策略的实际叶节点，向已配置的Bark/WxPusher发送原节点和当前节点。首次/新启动只建基线，按持久事件编号去重；普通WAN/DNS中断不当设备故障，原短信邮件保留。
+
+流量显示精度：面板速率B/s使用整数，K/s、M/s、G/s及流量M/G保留两位；只是显示舍入，不改写原始账本与校准值。见[显示精度检查](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/reviews/2026-10-29-display-precision.md)。
