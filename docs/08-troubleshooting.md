@@ -335,3 +335,11 @@ vnStat 2.13 的自动检测模式存在 Linux 下误判 32 位计数器的已知
 ## charger-manager仍提示电池过热/过冷
 
 核对实际供电、FGU/NTC温度、SoC温度、驱动保护状态和重启原因，不能把F50无内置电池当作可以写假温度或关闭保护的依据。当前维护验证仍观察到该警告，保留待定位；EDMA full/backpressure与硬发送失败分别检查，不用整体静音内核日志来表示已修复。
+
+### EDMA pending queue full / backpressure 如何处理？
+
+这是无线PCIe发送暂存队列的回压提示。先核对同一启动内的硬发送错误增量、队列是否继续前进，以及实际双向文件校验；单独出现full不等于丢包。已有完成重试补丁时，还应核对新数据唤醒是否遵守等待标记，保留命令处理和漏通知的有界兜底；匹配源码修补见[EDMA数据门控](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/tree/main/extras/dashboard/optional/wifi-source-repair)。模块须核对内核配置、CRC/CFI和加载build ID，备份后安排重载/重启。
+
+### 切换代理节点可以通知吗？
+
+可选[节点切换通知](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/features/push-notifications.md)会解析主策略的实际叶节点，向已配置的Bark/WxPusher发送原节点和当前节点。首次/新启动只建基线，按持久事件编号去重；普通WAN/DNS中断不当设备故障，原短信邮件保留。
