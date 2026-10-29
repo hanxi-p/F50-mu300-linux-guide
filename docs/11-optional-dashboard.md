@@ -1,4 +1,4 @@
-# 第十一章（可选）：页面美化与流量套餐面板
+# 已迁移：页面美化与流量套餐面板
 
 本章已迁移到独立仓库 **[F50 OpenWrt 面板与功能扩展](https://github.com/hanxi-p/F50-OpenWrt-Dashboard)**。
 

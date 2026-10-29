@@ -159,7 +159,7 @@ uci commit dhcp
 - 本机厂商 5.4 内核曾出现 firewall flowtable 兼容问题，软件 flow offload 保持关闭，具体修复见 Q&A。
 - 蜂窝 WAN 有运营商提供的 IPv6 时保留；LAN 是否发送 IPv6 默认路由，按手机上网与电脑管理的实际安排配置。
 - 国家代码按实际使用地区设置，操作见 Q&A；它不是任意增加无线功率的开关。
-- 厂商无线驱动出现 DFS 启动失败时，使用 [首页优化中的非 DFS 保护](11-optional-dashboard.md#10-qa)：自动与手动选信道避开 DFS，开机按当前国家码重新核对合法信道组。保持 USB 管理连接后再调整无线。
+- 厂商无线驱动出现 DFS 启动失败时，使用 [首页优化中的非 DFS 保护](https://github.com/hanxi-p/F50-OpenWrt-Dashboard/blob/main/docs/troubleshooting.md)：自动与手动选信道避开 DFS，开机按当前国家码重新核对合法信道组。保持 USB 管理连接后再调整无线。
 - 保留温控保护、原装屏蔽罩和导热结构，机身通风，远离其他热源。
 
 本次诊断时 CPU 大部分时间空闲，温度传感器约 53–62°C，未触发温控降频。真实吞吐取决于蜂窝信号、运营商、无线环境和所用服务，软件负载与温度按自己的使用场景观察。实际瓦数使用 USB 电流表测量，驱动显示的 5V / 2A 是供电能力。
@@ -214,3 +214,5 @@ Get-FileHash .\management-config.tar.gz -Algorithm SHA256
 需要在手机上集中查看速率、套餐用量、温度与每个 CPU 核心时，进入 [可选首页优化](11-optional-dashboard.md)。按该章提示词准备依赖、备份并部署，完成浏览器验收后再保存最终系统备份。
 
 整体顺序、锁审查和验收方法见 [稳定性检查与复刻验收](reliability-checks.md)。
+
+需要处理原版报错、核对官方修正或定制无线驱动时，继续阅读[第十一章：基于原版的报错修复与驱动定制优化](11-custom-fixes-and-drivers.md)，按实际问题选用，完成后更新恢复材料。
