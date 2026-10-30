@@ -1,5 +1,5 @@
 {
-  "guide_date": "2026-10-28",
+  "guide_date": "2026-10-30",
   "tested_device": "ZTE F50 / MU300, original B15 slot b, retained B09 slot a",
   "upstream": {
     "repo": "https://github.com/dikeckaan/mu300-linux",
@@ -110,5 +110,18 @@
     "base_rootfs": "v2026.10.11",
     "upstream_commit": "52093b28c9c3e0280b1a1be6f0d4b5437a6053a1",
     "scope": "Selected userspace, SMS, IPv6, USB and fw4 components; local boot/update mutex and process cleanup; no full rootfs or kernel upgrade"
+  },
+  "selective_maintenance": {
+    "date": "2026-10-30",
+    "reference_release": "v2026.10.29.1",
+    "reference_prs": [
+      435,
+      439
+    ],
+    "scope": "old F50 vendor 5.4 background scripts and module completeness preflight only",
+    "source": "extras/system-reliability/selective-20261030",
+    "kernel_changed": false,
+    "rootfs_changed": false,
+    "modules_pending_boot_recovery_deployed": false
   }
 }

@@ -1,0 +1,214 @@
+--- a/opt/mu300/bin/early-recorder
++++ b/opt/mu300/bin/early-recorder
+@@ -43,9 +43,9 @@
+         ip -br addr 2>/dev/null
+         echo "--- lsmod"
+         systemctl list-units --no-legend --plain --state=activating,failed 2>/dev/null
+-        [ -f /etc/openwrt_release ] && { echo "--- ps"; ps w 2>/dev/null; echo "--- logread"; logread 2>/dev/null | grep -v PR_CAPBSET | tail -300; echo "--- android logcat"; tail -150 /var/log/android-logcat.txt 2>/dev/null; echo "--- mu300 logs"; tail -40 /tmp/mu300-*.log 2>/dev/null; }
++        [ -f /etc/openwrt_release ] && { echo "--- ps"; ps w 2>/dev/null; echo "--- logread"; logread -l 300 2>/dev/null | grep -v PR_CAPBSET | tail -300; echo "--- android logcat"; tail -150 /var/log/android-logcat.txt 2>/dev/null; echo "--- mu300 logs"; tail -40 /tmp/mu300-*.log 2>/dev/null; }
+         echo "--- dmesg"
+-        dmesg | tail -c 1000000
++        dmesg -s 1000000 | tail -c 1000000
+         echo "MU300-PERSIST-END"
+     } > /run/mu300-early.txt 2>&1
+     head -c 65536 /dev/zero >> /run/mu300-early.txt
+@@ -59,5 +59,5 @@
+     sync
+     # every 2 s for the first minute and a half, where the intermittent early hangs have happened; a 10 s gap
+     # left a single snapshot of a boot that died between 11 and 21 s
+-    if [ "$(cut -d. -f1 /proc/uptime)" -lt 90 ]; then sleep 2; else sleep 10; fi
++    if [ "$(cut -d. -f1 /proc/uptime)" -lt 90 ]; then sleep 2; else sleep 30; fi
+ done
+--- a/opt/mu300/bin/mu300-buttons
++++ b/opt/mu300/bin/mu300-buttons
+@@ -19,7 +19,37 @@
+     else systemctl start mu300-hotspot; fi
+ }
+ 
+-mu300-keys -l 3000 -t 5 | while read -r code kind; do
++# PR435: avoid starting the LED helper on every tick when it cannot change anything.
++# Re-read settings with shell builtins so a live timeout change is still respected.
++BUTTON_DEVICE=$(${MU300_BIN:-/opt/mu300/bin}/mu300-device)
++led_sleep_due() {
++    local timeout=0 line value until now rest
++    [ "$BUTTON_DEVICE" != u30air ] || timeout=60
++    if [ -r "${MU300_LED_CONF:-/etc/mu300/led.conf}" ]; then
++        while IFS= read -r line || [ -n "$line" ]; do
++            case $line in LED_TIMEOUT=*) value=${line#LED_TIMEOUT=}
++                case $value in ''|*[!0-9]*) ;; *) timeout=$value ;; esac ;;
++            esac
++        done < "${MU300_LED_CONF:-/etc/mu300/led.conf}"
++    fi
++    [ "$timeout" != 0 ] || return 1
++    { read -r until < "${MU300_SYSROOT:-}/run/mu300/led/.awake-until"; } 2>/dev/null || return 1
++    case $until in ''|*[!0-9]*) return 1 ;; esac
++    { read -r now rest < "${MU300_SYSROOT:-}/proc/uptime"; } 2>/dev/null || return 1
++    now=${now%%.*}
++    case $now in ''|*[!0-9]*) return 1 ;; esac
++    [ "$now" -ge "$until" ]
++}
++# Wait on a background pipeline so TERM can clean up both the key reader and shell.
++stop_children() {
++    local stat pid comm state parent rest
++    for stat in /proc/[0-9]*/stat; do
++        { read -r pid comm state parent rest < "$stat"; } 2>/dev/null || continue
++        [ "$parent" != "$$" ] || kill -TERM "$pid" 2>/dev/null
++    done
++}
++trap 'stop_children; exit 143' TERM INT HUP
++mu300-keys -l 3000 -t 5 | { while read -r code kind; do
+     case "$code $kind" in
+         "$KEY_POWER short") mu300-led wake ;;
+         "$KEY_POWER long")
+@@ -28,6 +58,8 @@
+             if is_openwrt; then poweroff; else systemctl poweroff; fi ;;
+         "$KEY_WIFI short") mu300-led wake; mu300-wifi-band toggle | logger -t mu300-buttons 2>/dev/null ;;
+         "$KEY_WIFI long") mu300-led wake; hotspot_toggle ;;
+-        "0 tick") mu300-led sleep --if-due ;;
++        "0 tick") if led_sleep_due; then mu300-led sleep --if-due; fi ;;
+     esac
+-done
++done; } &
++KEY_READER_JOB=$!
++wait "$KEY_READER_JOB"
+--- a/opt/mu300/bin/mu300-led
++++ b/opt/mu300/bin/mu300-led
+@@ -43,13 +43,27 @@
+ # outshines the others when mixed
+ SIREN="sc27xx:red sc27xx:green sc27xx:blue"
+ SIREN_PID=$R/run/mu300/led-siren.pid
+-TIMEOUT=$(sed -n 's/^LED_TIMEOUT=\([0-9][0-9]*\)$/\1/p' "${MU300_LED_CONF:-/etc/mu300/led.conf}" 2>/dev/null | tail -n1)
+-TIMEOUT=${TIMEOUT:-$DEFAULT_TIMEOUT}
++# PR435, adapted to the installed F50 LED behavior: no sed/tail on each invocation.
++TIMEOUT=$DEFAULT_TIMEOUT
++if [ -r "${MU300_LED_CONF:-/etc/mu300/led.conf}" ]; then
++    while IFS= read -r line || [ -n "$line" ]; do
++        case $line in LED_TIMEOUT=*) value=${line#LED_TIMEOUT=}
++            case $value in ''|*[!0-9]*) ;; *) TIMEOUT=$value ;; esac ;;
++        esac
++    done < "${MU300_LED_CONF:-/etc/mu300/led.conf}"
++fi
+ 
+-uptime_s() { cut -d. -f1 "$R/proc/uptime" 2>/dev/null || echo 0; }
++uptime_s() {
++    local seconds rest
++    if { read -r seconds rest < "$R/proc/uptime"; } 2>/dev/null; then
++        seconds=${seconds%%.*}
++        case $seconds in ''|*[!0-9]*) echo 0 ;; *) echo "$seconds" ;; esac
++    else echo 0; fi
++}
+ awake() {
+     [ "$TIMEOUT" = 0 ] && return 0
+-    until=$(cat "$STATE/.awake-until" 2>/dev/null) || return 1
++    { read -r until < "$STATE/.awake-until"; } 2>/dev/null || return 1
++    case $until in ''|*[!0-9]*) return 1 ;; esac
+     [ "$(uptime_s)" -lt "${until:-0}" ]
+ }
+ vendor_ldo() {  # vendor_ldo zte-ldoN: the 5.4 kernel's switch for that LDO, if there
+--- a/opt/mu300/bin/mu300-update
++++ b/opt/mu300/bin/mu300-update
+@@ -781,6 +781,27 @@
+     printf 'boot: the modules of the previous image (%s) are back in: %s\n' "$_krel" "$(installed_systems)"
+ }
+ 
++# PR439 preflight only. Full pending-module boot recovery requires its paired boot init.
++# Verify names as well as count; do not touch installed modules for an incomplete bundle.
++modules_complete() {
++    local entry wanted=0 actual=0 file
++    [ -r "$2" ] && [ -s "$1/kernel.release" ] || return 1
++    while IFS= read -r entry || [ -n "$entry" ]; do
++        case $entry in ./modules/*.ko)
++            file=${entry#./modules/}
++            case $file in */*|.*) return 1 ;; esac
++            [ -f "$1/modules/$file" ] && [ -s "$1/modules/$file" ] || return 1
++            wanted=$((wanted + 1)) ;;
++        esac
++    done < "$2"
++    [ "$wanted" -gt 0 ] || return 1
++    for file in "$1"/modules/*.ko; do
++        [ -f "$file" ] && [ -s "$file" ] || return 1
++        actual=$((actual + 1))
++    done
++    [ "$actual" -eq "$wanted" ]
++}
++
+ kernel_modules_into_systems() {  # kernel_modules_into_systems BUNDLE_DIR (unpacked)
+     _krel=$(cat "$1/kernel.release" 2>/dev/null)
+     case $_krel in ''|*/*|.*) echo "boot: bad kernel release '$_krel' in the bundle" >&2; return 1 ;; esac
+@@ -848,6 +869,10 @@
+             if grep -qx "./$f" "$tmp/list"; then untar -xzf "$bundle" -C "$tmp" "./$f" || true; fi
+         done
+         mods=1
++    fi
++    if [ -n "$mods" ]; then
++        modules_complete "$tmp" "$tmp/list" || { echo "boot: incomplete modules; nothing installed" >&2; return 1; }
++        sync || return 1
+     fi
+     id=$(cat "$tmp/Image" "$tmp/ramdisk-generic.lz4" | sha256sum | cut -d' ' -f1)
+ 
+--- a/opt/mu300/bin/thermal-guard
++++ b/opt/mu300/bin/thermal-guard
+@@ -19,22 +19,28 @@
+ done
+ 
+ hottest() {
+-    local max=0 t
++    local value z
++    t=
+     for z in "$R"/sys/class/thermal/thermal_zone*/temp; do
+-        read -r t < "$z" 2>/dev/null || continue
+-        [ "$t" -gt "$max" ] 2>/dev/null && max=$t
++        { read -r value < "$z"; } 2>/dev/null || continue
++        case $value in ''|*[!0-9]*) continue ;; esac
++        [ -n "$t" ] || t=$value
++        [ "$value" -le "$t" ] || t=$value
+     done
+-    echo "$max"
+ }
+ DEVICE=$(${MU300_BIN:-/opt/mu300/bin}/mu300-device)
+ battery() {  # the battery's temperature in tenths of a degree; the U30 Air only
+-    local b t
++    local path value type
++    b=
+     # The F50 has no battery, but under mainline the PMIC's fuel gauge probes on it too and reports one, at a
+     # temperature read from an unconnected NTC input (750: 75 C): the alarm went on at every boot and never off.
+     [ "$DEVICE" = u30air ] || return 0
+-    for b in "$R"/sys/class/power_supply/*; do
+-        [ "$(cat "$b/type" 2>/dev/null)" = Battery ] || continue
+-        read -r t < "$b/temp" 2>/dev/null && [ -n "$t" ] && { echo "$t"; return; }
++    for path in "$R"/sys/class/power_supply/*; do
++        { read -r type < "$path/type"; } 2>/dev/null || continue
++        [ "$type" = Battery ] || continue
++        { read -r value < "$path/temp"; } 2>/dev/null || continue
++        case $value in ''|*[!0-9]*) continue ;; esac
++        b=$value; return 0
+     done
+ }
+ 
+@@ -55,8 +61,14 @@
+ # the alarm's state outlives a restart of this service, so a cooled device is never left flashing
+ ALARM=$R/run/mu300/thermal-alarm
+ while :; do
+-    t=$(hottest)
+-    b=$(battery)
++    # PR435: normal sampling uses builtins, not two command-substitution processes.
++    hottest
++    battery
++    # An unreadable sensor is not a cool sensor: keep existing limits and alarm.
++    if [ -z "$t" ]; then
++        [ -n "$R" ] && exit 0
++        sleep 5; continue
++    fi
+     if [ "$t" -ge "$CRIT" ] && [ "$throttle" = 1 ]; then
+         logger -t thermal-guard "critical temperature ${t} mC, powering off"
+         poweroff
+@@ -65,7 +77,8 @@
+         logger -t thermal-guard "hot (${t} mC): lowered cpufreq limits"
+     elif [ "$t" -le "$COOL" ] && [ "$throttle" = 1 ]; then
+         for p in "$R"/sys/devices/system/cpu/cpufreq/policy*; do
+-            [ "$(cat $p/scaling_max_freq)" -lt "$(cat $p/cpuinfo_max_freq)" ] && step "$p" 1
++            { read -r current < "$p/scaling_max_freq" && read -r maximum < "$p/cpuinfo_max_freq"; } 2>/dev/null || continue
++            [ "$current" -lt "$maximum" ] 2>/dev/null && step "$p" 1
+         done
+     fi
+     if [ ! -e "$ALARM" ] && { [ "$t" -ge "$HOT" ] || [ "${b:-0}" -ge "$BATT_HOT" ]; }; then

@@ -1,0 +1,65 @@
+#!/bin/sh
+# The buttons (Ubuntu and OpenWrt; run by mu300-buttons.service / /etc/init.d/mu300-buttons):
+#   power, short press        wake the LEDs (they go dark after LED_TIMEOUT, see mu300-led)
+#   power, held 3 s           shut down cleanly (the battery-powered U30 Air; the F50 starts again on USB power)
+#   Wi-Fi key, short press    hotspot 2.4 <-> 5 GHz (U30 Air; the Wi-Fi LED shows the band: blue 5, white 2.4)
+#   Wi-Fi key, held 3 s       hotspot off / on
+# mu300-keys reports the presses; its tick every 5 s lets the LEDs time out. Ubuntu's logind leaves the power key
+# to this script (/etc/systemd/logind.conf.d/mu300-buttons.conf): it used to power the device off at a touch.
+export PATH="$PATH:/opt/mu300/bin:/usr/sbin:/sbin"
+KEY_POWER=116
+KEY_WIFI=138   # "Wifi Switch Key" in the U30 Air's device tree (KEY_HELP's code, as its Android maps it)
+is_openwrt() { [ -e /etc/openwrt_release ]; }
+
+hotspot_toggle() {
+    if is_openwrt; then
+        if ubus call hostapd.wlan0 get_status >/dev/null 2>&1; then wifi down; mu300-led wifi off
+        else wifi up; ( mu300-led wifi sync 120 ) </dev/null >/dev/null 2>&1 & fi
+    elif systemctl is-active --quiet mu300-hotspot; then systemctl stop mu300-hotspot
+    else systemctl start mu300-hotspot; fi
+}
+
+# PR435: avoid starting the LED helper on every tick when it cannot change anything.
+# Re-read settings with shell builtins so a live timeout change is still respected.
+BUTTON_DEVICE=$(${MU300_BIN:-/opt/mu300/bin}/mu300-device)
+led_sleep_due() {
+    local timeout=0 line value until now rest
+    [ "$BUTTON_DEVICE" != u30air ] || timeout=60
+    if [ -r "${MU300_LED_CONF:-/etc/mu300/led.conf}" ]; then
+        while IFS= read -r line || [ -n "$line" ]; do
+            case $line in LED_TIMEOUT=*) value=${line#LED_TIMEOUT=}
+                case $value in ''|*[!0-9]*) ;; *) timeout=$value ;; esac ;;
+            esac
+        done < "${MU300_LED_CONF:-/etc/mu300/led.conf}"
+    fi
+    [ "$timeout" != 0 ] || return 1
+    { read -r until < "${MU300_SYSROOT:-}/run/mu300/led/.awake-until"; } 2>/dev/null || return 1
+    case $until in ''|*[!0-9]*) return 1 ;; esac
+    { read -r now rest < "${MU300_SYSROOT:-}/proc/uptime"; } 2>/dev/null || return 1
+    now=${now%%.*}
+    case $now in ''|*[!0-9]*) return 1 ;; esac
+    [ "$now" -ge "$until" ]
+}
+# Wait on a background pipeline so TERM can clean up both the key reader and shell.
+stop_children() {
+    local stat pid comm state parent rest
+    for stat in /proc/[0-9]*/stat; do
+        { read -r pid comm state parent rest < "$stat"; } 2>/dev/null || continue
+        [ "$parent" != "$$" ] || kill -TERM "$pid" 2>/dev/null
+    done
+}
+trap 'stop_children; exit 143' TERM INT HUP
+mu300-keys -l 3000 -t 5 | { while read -r code kind; do
+    case "$code $kind" in
+        "$KEY_POWER short") mu300-led wake ;;
+        "$KEY_POWER long")
+            logger -t mu300-buttons "power button held: shutting down" 2>/dev/null
+            mu300-led wake
+            if is_openwrt; then poweroff; else systemctl poweroff; fi ;;
+        "$KEY_WIFI short") mu300-led wake; mu300-wifi-band toggle | logger -t mu300-buttons 2>/dev/null ;;
+        "$KEY_WIFI long") mu300-led wake; hotspot_toggle ;;
+        "0 tick") if led_sleep_due; then mu300-led sleep --if-due; fi ;;
+    esac
+done; } &
+KEY_READER_JOB=$!
+wait "$KEY_READER_JOB"

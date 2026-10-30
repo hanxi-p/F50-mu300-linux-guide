@@ -1,0 +1,175 @@
+#!/bin/sh
+# The device's LEDs by what they mean, so the services need not know which device they run on.
+#   mu300-led power on|off      Linux is up (set at boot, which also wakes the LEDs; cleared at shutdown)
+#   mu300-led data on|5g|off|error  mobile data connected (5g: over 5G) / not connected / no service (no SIM, not
+#                               registered)
+#   mu300-led wifi on|off|sync [S]  the Wi-Fi hotspot is up (U30 Air: blue on 5 GHz, white on 2.4 GHz); sync: whatever
+#                               wlan0 is now, and again every 2 s for S seconds (OpenWrt: LuCI or the button)
+#   mu300-led wake              show the LEDs again, for LED_TIMEOUT seconds (the power button, mu300-buttons)
+#   mu300-led sleep [--if-due]  dark now (--if-due: only once the timeout has passed; mu300-buttons asks)
+#   mu300-led test              each LED in turn, 2 s each, with its name (to tell which one is where)
+#   mu300-led alarm on|off      too hot (thermal-guard): the PMIC's RGB LED flashes red, white, blue one at a time
+#                               like a siren, also while the others are dark
+# ZTE F50 (read from its Android): network = the PMIC's RGB LED, blue on 4G, white (its "green" channel) on 5G, red
+#   without service; Wi-Fi = the PMIC's keypad backlight sink ("keyboard-backlight"), at ZTE's 48 of 127, whichever
+#   band. No power LED. ZTE U30 Air (found by lighting each one):
+#   battery  the PMIC's RGB LED: its "green" channel is white (power: Linux is up), red, blue
+#   network  as ZTE's firmware: blue on 4G (a GPIO, net_blue), white on 5G (LDO VDDCAMA0), red without service
+#            (the PMIC's keypad backlight sink, "keyboard-backlight" under 5.4 and mainline)
+#   Wi-Fi    white: LDO VDDCAMA1 (2.4 GHz); blue: LDO VDDCAMA2 (5 GHz)
+# The LDO ones are zte-ldo0..2 under mainline (leds-zte-ldo) and vddcama0..2_status of ZTE's zte_ldo_leds under
+# 5.4; the other GPIO LEDs in its device tree (net_red, net_green, net_white, pwr_green, wifi_*) light nothing,
+# under Android too.
+# The device comes from mu300-device; an LED this device has not is skipped.
+#
+# Timeout: /etc/mu300/led.conf, LED_TIMEOUT=SECONDS (0: always on). Default 60 on the U30 Air, which has a power
+# button to wake them, and 0 on the F50. What each LED should show is kept in /run/mu300/led, so a change while
+# the LEDs are dark shows up on the next wake.
+# Every write is best effort: the PMIC rejects a brightness write now and then (mobile-data), and a cosmetic
+# LED must never make a service fail.
+# (MU300_SYSROOT, MU300_BIN and MU300_LED_CONF are for tests/: a fake /, this directory, a led.conf)
+R=${MU300_SYSROOT:-}
+LEDS=$R/sys/class/leds
+STATE=$R/run/mu300/led
+DEVICE=$(${MU300_BIN:-/opt/mu300/bin}/mu300-device)
+
+case $DEVICE in
+    u30air) POWER=sc27xx:green DATA=net_blue DATA5G=zte-ldo0 NODATA=keyboard-backlight WIFI5=zte-ldo2 WIFI24=zte-ldo1
+            DEFAULT_TIMEOUT=60 ;;
+    *)      POWER= DATA=sc27xx:blue DATA5G=sc27xx:green NODATA=sc27xx:red WIFI5=keyboard-backlight
+            WIFI24=keyboard-backlight DEFAULT_TIMEOUT=0 ;;
+esac
+# the PMIC's RGB LED on both (the U30 Air's battery LED, the F50's network LED), one colour at a time: the white
+# outshines the others when mixed
+SIREN="sc27xx:red sc27xx:green sc27xx:blue"
+SIREN_PID=$R/run/mu300/led-siren.pid
+# PR435, adapted to the installed F50 LED behavior: no sed/tail on each invocation.
+TIMEOUT=$DEFAULT_TIMEOUT
+if [ -r "${MU300_LED_CONF:-/etc/mu300/led.conf}" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        case $line in LED_TIMEOUT=*) value=${line#LED_TIMEOUT=}
+            case $value in ''|*[!0-9]*) ;; *) TIMEOUT=$value ;; esac ;;
+        esac
+    done < "${MU300_LED_CONF:-/etc/mu300/led.conf}"
+fi
+
+uptime_s() {
+    local seconds rest
+    if { read -r seconds rest < "$R/proc/uptime"; } 2>/dev/null; then
+        seconds=${seconds%%.*}
+        case $seconds in ''|*[!0-9]*) echo 0 ;; *) echo "$seconds" ;; esac
+    else echo 0; fi
+}
+awake() {
+    [ "$TIMEOUT" = 0 ] && return 0
+    { read -r until < "$STATE/.awake-until"; } 2>/dev/null || return 1
+    case $until in ''|*[!0-9]*) return 1 ;; esac
+    [ "$(uptime_s)" -lt "${until:-0}" ]
+}
+vendor_ldo() {  # vendor_ldo zte-ldoN: the 5.4 kernel's switch for that LDO, if there
+    case $1 in zte-ldo[0-9]) ;; *) return 1 ;; esac
+    for f in "$R"/sys/devices/platform/*zte*ldo*leds*/vddcama${1#zte-ldo}_status; do [ -e "$f" ] && { echo "$f"; return 0; }; done
+    return 1
+}
+has_led() { [ -e "$LEDS/$1" ] || vendor_ldo "$1" >/dev/null; }
+level() {  # level NAME: its brightness when lit (ZTE lights the F50's Wi-Fi LED at 48: a low-current sink)
+    case $DEVICE:$1 in f50:keyboard-backlight) echo 48 ;; *) cat "$LEDS/$1/max_brightness" 2>/dev/null ;; esac
+}
+write() {  # write NAME 0|1: the LED itself
+    if [ ! -e "$LEDS/$1" ] && f=$(vendor_ldo "$1"); then echo "$2" > "$f" 2>/dev/null; return 0; fi
+    [ -w "$LEDS/$1/brightness" ] || return 0
+    echo none > "$LEDS/$1/trigger" 2>/dev/null
+    if [ "$2" = 1 ]; then level "$1"; else echo 0; fi > "$LEDS/$1/brightness" 2>/dev/null
+    return 0
+}
+set_led() {  # set_led NAME 0|1: what it should show; lit only while awake
+    [ -n "$1" ] || return 0
+    has_led "$1" || return 0
+    mkdir -p "$STATE" 2>/dev/null && echo "$2" > "$STATE/$1" 2>/dev/null
+    if [ "$2" = 1 ] && ! awake; then write "$1" 0; else write "$1" "$2"; fi
+}
+wifi_band() {  # 5 or 2.4: the channel the hotspot runs on, else (it has none yet, just started) its setting
+    ch=$(iw dev wlan0 info 2>/dev/null | sed -n 's/.*channel \([0-9]*\).*/\1/p' | head -n1)
+    if [ -n "$ch" ]; then [ "$ch" -gt 14 ] && echo 5 || echo 2.4
+    else "${MU300_BIN:-/opt/mu300/bin}/mu300-wifi-band" 2>/dev/null | sed -n 's/^hotspot: \([0-9.]*\) GHz$/\1/p'; fi
+}
+show_all() {  # every LED as it should be
+    for f in "$STATE"/*; do
+        [ -f "$f" ] || continue
+        write "${f##*/}" "$(cat "$f")"
+    done
+}
+siren_running() { p=$(cat "$SIREN_PID" 2>/dev/null) && [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+nap() { sleep "$1" 2>/dev/null || sleep 1; }   # (a busybox without fractional sleep)
+
+case "$1 ${2:-}" in
+    "power on")   set_led "$POWER" 1; [ "$TIMEOUT" = 0 ] || exec "$0" wake ;;
+    "power off")  set_led "$POWER" 0 ;;
+    "data on")    set_led "$NODATA" 0; [ "$DATA5G" = "$DATA" ] || set_led "$DATA5G" 0; set_led "$DATA" 1 ;;
+    "data 5g")    set_led "$NODATA" 0; [ "$DATA5G" = "$DATA" ] || set_led "$DATA" 0; set_led "$DATA5G" 1 ;;
+    "data off")   set_led "$NODATA" 0; set_led "$DATA5G" 0; set_led "$DATA" 0 ;;
+    "data error") set_led "$DATA" 0; set_led "$DATA5G" 0; set_led "$NODATA" 1 ;;
+    "wifi on")
+        if [ "$WIFI5" = "$WIFI24" ]; then set_led "$WIFI5" 1
+        elif [ "$(wifi_band)" = 5 ]; then set_led "$WIFI24" 0; set_led "$WIFI5" 1
+        else set_led "$WIFI5" 0; set_led "$WIFI24" 1; fi ;;
+    "wifi off")   set_led "$WIFI5" 0; [ "$WIFI24" = "$WIFI5" ] || set_led "$WIFI24" 0 ;;
+    "wifi sync")  # a running AP has its SSID in iw's answer; a stopped hostapd leaves "type AP" without one
+        # (a hotspot that LuCI turned on can take longer than any one moment to come up: S follows it a while)
+        n=${3:-0} last=
+        case $n in ''|*[!0-9]*) n=0 ;; esac
+        while :; do
+            if iw dev wlan0 info 2>/dev/null | grep -q '^[[:space:]]*type AP' &&
+               iw dev wlan0 info 2>/dev/null | grep -q '^[[:space:]]*ssid '; then s=on; else s=off; fi
+            [ "$s" = "$last" ] || { "$0" wifi "$s"; last=$s; }
+            [ "$n" -gt 0 ] || break
+            nap 2; n=$((n - 2))
+        done ;;
+    "wake "*)
+        [ "$TIMEOUT" = 0 ] && exit 0
+        mkdir -p "$STATE" 2>/dev/null
+        echo $(( $(uptime_s) + TIMEOUT )) > "$STATE/.awake-until"
+        show_all ;;
+    "sleep "*)
+        [ "$TIMEOUT" = 0 ] && exit 0
+        if [ "${2:-}" = --if-due ] && awake; then exit 0; fi
+        [ -e "$STATE/.awake-until" ] || [ "${2:-}" != --if-due ] || exit 0   # dark already
+        rm -f "$STATE/.awake-until"
+        for f in "$STATE"/*; do [ -f "$f" ] && write "${f##*/}" 0; done ;;
+    "alarm on")
+        siren_running && exit 0
+        mkdir -p "${SIREN_PID%/*}" 2>/dev/null
+        "$0" siren </dev/null >/dev/null 2>&1 &
+        echo $! > "$SIREN_PID" ;;
+    "alarm off")
+        siren_running || { rm -f "$SIREN_PID"; exit 0; }
+        kill "$p" 2>/dev/null
+        rm -f "$SIREN_PID"
+        nap 0.2
+        for l in $SIREN; do write "$l" 0; done
+        if awake; then show_all; fi ;;   # the U30 Air's white is its power LED, the F50's colours its network LED
+    "siren "*)   # (alarm on runs this in the background)
+        # Only the siren named in the pid file runs: one left behind (its alarm switched off while it was
+        # between writes, a restarted service) stops by itself instead of flashing along with the new one.
+        # The file is written just after the start, so a missing one counts only after the first round.
+        n=0
+        while :; do
+            own=$(cat "$SIREN_PID" 2>/dev/null)
+            if [ -n "$own" ]; then [ "$own" = $$ ] || exit 0
+            elif [ $n -gt 0 ]; then exit 0; fi
+            n=$((n + 1))
+            for on in $SIREN; do
+                for l in $SIREN; do [ "$l" = "$on" ] || write "$l" 0; done
+                write "$on" 1; nap 0.25
+            done
+        done ;;
+    "test "*)
+        for l in "$LEDS"/*; do
+            n=${l##*/}
+            case $DEVICE:$n in *:mmc*) continue ;; f50:keyboard-backlight) ;; *:*backlight*) continue ;; esac
+            old=$(cat "$l/brightness" 2>/dev/null)
+            echo "$n"; write "$n" 1; sleep 2; echo "${old:-0}" > "$l/brightness" 2>/dev/null
+        done ;;
+    *) sed -n '2,10s/^# \{0,1\}//p' "$0" >&2; exit 2 ;;
+esac
+exit 0

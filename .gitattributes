@@ -1,3 +1,6 @@
 extras/dashboard/* text eol=lf
 extras/sms-email/* text eol=lf
 extras/system-reliability/* text eol=lf
+extras/system-reliability/** text eol=lf
+# Unified patches require the leading space on empty context lines.
+extras/system-reliability/selective-20261030/selective.patch whitespace=-blank-at-eol
